@@ -2,18 +2,22 @@
 #define CMD_DISCORD_BOT_H
 
 #include <cmd/websocket.h>
-#include <iostream>
-#include "json.hpp"
-#include <boost/lockfree/queue.hpp>
-#include <thread>
-#include <mutex>
 #include <condition_variable>
+#include <iostream>
+#include <mutex>
+#include <thread>
+
+#include "api.h"
+#include "json.hpp"
+#include "gateway_event_listeners.h"
 
 namespace cmd
 {
 namespace discord
 {
-enum class gateway_op_recv {
+namespace gateway
+{
+enum class op_recv {
     dispatch = 0,
     heartbeat = 1,
     reconnect = 7,
@@ -22,7 +26,7 @@ enum class gateway_op_recv {
     heatbeat_ack = 11
 };
 
-enum class gateway_op_send {
+enum class op_send {
     heartbeat = 1,
     identify = 2,
     status_update = 3,
@@ -32,45 +36,32 @@ enum class gateway_op_send {
     request_guild_members = 8
 };
 
-struct echo_dispatch_handler {
-    void operator()(nlohmann::json &data, const std::string &type)
-    {
-        if (data.is_object())
-            std::cout << "d: " << data.dump(4) << "\n";
-        else if (!data.is_null())
-            std::cout << "d: " << data << "\n";
-    }
-};
-
 class gateway
 {
 public:
     explicit gateway(cmd::websocket::socket &sock, const std::string &token);
     ~gateway();
     void next_event();
-    void register_listener(gateway_op_recv e, std::function<void(nlohmann::json &, const std::string &)> h);
+    void register_listener(op_recv e, event_listener::base::ptr h);
+    void heartbeat();
 
 private:
     using clock = std::chrono::steady_clock;
-    void heartbeat();
     void safe_send(const std::string &s);
 
     cmd::websocket::socket sock;
     std::vector<unsigned char> buffer;
-    std::multimap<gateway_op_recv, std::function<void(nlohmann::json &, const std::string &)>> handlers;
+    std::multimap<op_recv, event_listener::base::ptr> handlers;
     std::string token;
-
-    std::thread heartbeat_thread;
-    std::mutex thread_mutex;
-    std::condition_variable loop_variable;
+    std::mutex write_mutex;
 
     clock::time_point last_msg_sent;
 
-    int heartbeat_interval;
     int seq_num;
     const bool compress = false;
     const int large_threshold = 250;
 };
+}
 }
 }
 

@@ -3,22 +3,14 @@
 #include <iostream>
 #include "json.hpp"
 
-cmd::discord::gateway::gateway(cmd::websocket::socket &sock, const std::string &token)
+cmd::discord::gateway::gateway::gateway(cmd::websocket::socket &sock, const std::string &token)
     : sock{sock}, token{token}
 {
-    auto hello_event_handler = [&](nlohmann::json &data, const std::string &) {
-        if (!data.is_null()) {
-            if (data["heartbeat_interval"].is_number())
-                heartbeat_interval = data["heartbeat_interval"].get<int>();
-            static bool first = true;
-            if (first) {
-                heartbeat_thread = std::thread{&cmd::discord::gateway::heartbeat, this};
-                first = false;
-            }
-        }
-    };
+    // On hello opcode, run the heartbeat_listener, spawns a thread and periodically calls
+    // this->heartbeat(). On destruction it stops the heartbeat thread and joins it
+    register_listener(op_recv::hello,
+                      event_listener::base::make<event_listener::heartbeat_listener>(this));
 
-    register_listener(cmd::discord::gateway_op_recv::hello, hello_event_handler);
     nlohmann::json identify{
         {"op", 2},
         {"d",
@@ -31,15 +23,9 @@ cmd::discord::gateway::gateway(cmd::websocket::socket &sock, const std::string &
     sock.send(message);
 }
 
-cmd::discord::gateway::~gateway()
-{
-    heartbeat_interval = -1;  // Notify other thread
-    loop_variable.notify_all();
-    if (heartbeat_thread.joinable())
-        heartbeat_thread.join();
-}
+cmd::discord::gateway::gateway::~gateway() {}
 
-void cmd::discord::gateway::next_event()
+void cmd::discord::gateway::gateway::next_event()
 {
     sock.next_message(buffer);
     auto json = nlohmann::json::parse(buffer.begin(), buffer.end());
@@ -56,24 +42,24 @@ void cmd::discord::gateway::next_event()
         }
         std::string t_val = json["t"].is_string() ? json["t"].get<std::string>() : "";
 
-        auto gateway_op = static_cast<cmd::discord::gateway_op_recv>(op_val);
+        auto gateway_op = static_cast<op_recv>(op_val);
         switch (gateway_op) {
-            case cmd::discord::gateway_op_recv::dispatch:
+            case op_recv::dispatch:
                 std::cout << "DISPATCH";
                 break;
-            case cmd::discord::gateway_op_recv::heartbeat:
+            case op_recv::heartbeat:
                 std::cout << "HEARTBEAT";
                 break;
-            case cmd::discord::gateway_op_recv::reconnect:
+            case op_recv::reconnect:
                 std::cout << "RECONNECT";
                 break;
-            case cmd::discord::gateway_op_recv::invalid_session:
+            case op_recv::invalid_session:
                 std::cout << "INVALID SESSION";
                 break;
-            case cmd::discord::gateway_op_recv::hello:
+            case op_recv::hello:
                 std::cout << "HELLO";
                 break;
-            case cmd::discord::gateway_op_recv::heatbeat_ack:
+            case op_recv::heatbeat_ack:
                 std::cout << "HEARTBEAT ACK";
                 break;
             default:
@@ -82,34 +68,26 @@ void cmd::discord::gateway::next_event()
         std::cout << "\n";
         auto range = handlers.equal_range(gateway_op);
         for (auto it = range.first; it != range.second; ++it) {
-            it->second(d, t_val);
+            it->second->handle(d, t_val);
         }
     }
 }
 
-void cmd::discord::gateway::register_listener(
-    gateway_op_recv e, std::function<void(nlohmann::json &, const std::string &)> h)
+void cmd::discord::gateway::gateway::register_listener(op_recv e, event_listener::base::ptr h)
 {
     handlers.emplace(e, h);
 }
 
-void cmd::discord::gateway::heartbeat()
+void cmd::discord::gateway::gateway::heartbeat()
 {
-    while (true) {
-        std::unique_lock<std::mutex> lock{thread_mutex};
-        loop_variable.wait_for(lock, std::chrono::milliseconds{heartbeat_interval});
-        if (heartbeat_interval < 0)
-            break;
-
-        nlohmann::json json{{"op", static_cast<int>(cmd::discord::gateway_op_send::heartbeat)},
-                            {"d", seq_num}};
-        sock.send(json.dump());
-        std::cout << "\n--------------HEARTBEAT SENT--------------\n";
-    }
+    nlohmann::json json{{"op", static_cast<int>(op_send::heartbeat)}, {"d", seq_num}};
+    safe_send(json.dump());
+    std::cout << "\n--------------HEARTBEAT SENT--------------\n";
 }
 
-void cmd::discord::gateway::safe_send(const std::string &s)
+void cmd::discord::gateway::gateway::safe_send(const std::string &s)
 {
+    std::lock_guard<std::mutex> guard{write_mutex};
     // Rate limit gateway messages, allow 1 message every 0.5 seconds
     auto now = clock::now();
     auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_msg_sent);
