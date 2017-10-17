@@ -1,22 +1,22 @@
 #ifndef CMD_DISCORD_API_H
 #define CMD_DISCORD_API_H
 
-#include <http_request.h>
-#include <chrono>
+#include <cmd/http_request.h>
 #include <mutex>
-#include <queue>
 
 namespace cmd
 {
 namespace discord
 {
-struct timeout {
+enum class api_limit_param { channel_id, guild_id, webhook_id, global };
+
+struct rate_limit {
     int limit;
     int remaining;
     std::time_t reset;
-
-    timeout() : limit{1}, remaining{1}, reset{0} {}
 };
+
+enum class api_result { failure, success, rate_limited };
 
 class api
 {
@@ -25,21 +25,19 @@ public:
     api(const api &) = delete;
     api &operator=(const api &) = delete;
     ~api() = default;
-    bool send_message(const std::string &channel_id, const std::string &message);
+    api_result send_message(const std::string &channel_id, const std::string &message);
 
 private:
-    using clock = std::chrono::steady_clock;
     const std::string api_base = "/api/v6";
     cmd::socket::ptr sock;
     cmd::stream stream;
     std::string token;
     std::mutex mutex;
-    int remaining_requests;
-    clock::time_point wait_until;
+    std::map<api_limit_param, rate_limit> limits;
 
     void set_common_headers(cmd::http_request &request);
-    bool check_success(cmd::http_request &request, int code);
-    void check_rate_limits(cmd::http_response &response);
+    api_result check_success(cmd::http_request &request, int code, api_limit_param param);
+    api_result check_rate_limits(cmd::http_response &response, api_limit_param param);
 };
 }
 }

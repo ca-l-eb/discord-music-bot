@@ -5,9 +5,10 @@
 #include <vector>
 
 #include <cmd/http_pool.h>
+#include <cmd/tls_socket.h>
 #include <cmd/websocket.h>
-#include <tls_socket.h>
 #include <thread>
+
 #include "api.h"
 #include "gateway.h"
 
@@ -42,12 +43,13 @@ int main(int argc, char *argv[])
         cmd::discord::api api{token};
         gateway gateway{sock, token};
 
-        gateway.register_listener(op_recv::dispatch, event_listener::base::make<event_listener::echo_listener>());
-        gateway.register_listener(op_recv::dispatch, event_listener::base::make<event_listener::hello_responder>(&api));
+        gateway.register_listener(op_recv::dispatch,
+                                  event_listener::base::make<event_listener::echo_listener>());
+        gateway.register_listener(
+            op_recv::dispatch, event_listener::base::make<event_listener::hello_responder>(&api));
 
-
-        // Get first n events each time calling any bound event listeners
-        for (int i = 0; i < 20; i++)
+        // Get first n events each time calling corresponding bound event listeners
+        for (int i = 0; i < 70; i++)
             gateway.next_event();
 
     } catch (std::exception &e) {

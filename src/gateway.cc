@@ -1,15 +1,15 @@
-#include "gateway.h"
 #include <future>
-#include <iostream>
-#include "json.hpp"
+
+#include "gateway.h"
 
 cmd::discord::gateway::gateway::gateway(cmd::websocket::socket &sock, const std::string &token)
     : sock{sock}, token{token}
 {
-    // On hello opcode, run the heartbeat_listener, spawns a thread and periodically calls
-    // this->heartbeat(). On destruction it stops the heartbeat thread and joins it
-    register_listener(op_recv::hello,
-                      event_listener::base::make<event_listener::heartbeat_listener>(this));
+    // On hello opcode, spawns a thread and periodically sends a heartbeat message through this
+    // gateway. On destruction it stops the heartbeat thread and joins it
+    auto heartbeater = event_listener::base::make<event_listener::heartbeat_listener>(this);
+    register_listener(op_recv::hello, heartbeater);
+    register_listener(op_recv::heartbeat_ack, heartbeater);
 
     nlohmann::json identify{
         {"op", 2},
@@ -27,7 +27,9 @@ cmd::discord::gateway::gateway::~gateway() {}
 
 void cmd::discord::gateway::gateway::next_event()
 {
+    // Read the next message from the WebSocket and place it in buffer
     sock.next_message(buffer);
+    // Parse the results as a json object
     auto json = nlohmann::json::parse(buffer.begin(), buffer.end());
 
     auto op = json["op"];
@@ -45,30 +47,24 @@ void cmd::discord::gateway::gateway::next_event()
         auto gateway_op = static_cast<op_recv>(op_val);
         switch (gateway_op) {
             case op_recv::dispatch:
-                std::cout << "DISPATCH";
                 break;
             case op_recv::heartbeat:
-                std::cout << "HEARTBEAT";
+                heartbeat();  // Respond to heartbeats with a heartbeat
                 break;
             case op_recv::reconnect:
-                std::cout << "RECONNECT";
                 break;
             case op_recv::invalid_session:
-                std::cout << "INVALID SESSION";
                 break;
             case op_recv::hello:
-                std::cout << "HELLO";
                 break;
-            case op_recv::heatbeat_ack:
-                std::cout << "HEARTBEAT ACK";
+            case op_recv::heartbeat_ack:
                 break;
             default:
                 throw std::runtime_error("Unknown opcode: " + std::to_string(op_val));
         }
-        std::cout << "\n";
         auto range = handlers.equal_range(gateway_op);
         for (auto it = range.first; it != range.second; ++it) {
-            it->second->handle(d, t_val);
+            it->second->handle(gateway_op, d, t_val);
         }
     }
 }
@@ -82,7 +78,6 @@ void cmd::discord::gateway::gateway::heartbeat()
 {
     nlohmann::json json{{"op", static_cast<int>(op_send::heartbeat)}, {"d", seq_num}};
     safe_send(json.dump());
-    std::cout << "\n--------------HEARTBEAT SENT--------------\n";
 }
 
 void cmd::discord::gateway::gateway::safe_send(const std::string &s)

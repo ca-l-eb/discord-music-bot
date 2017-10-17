@@ -3,13 +3,12 @@
 
 #include <cmd/websocket.h>
 #include <condition_variable>
-#include <iostream>
 #include <mutex>
 #include <thread>
 
 #include "api.h"
-#include "json.hpp"
 #include "gateway_event_listeners.h"
+#include "json.hpp"
 
 namespace cmd
 {
@@ -17,25 +16,6 @@ namespace discord
 {
 namespace gateway
 {
-enum class op_recv {
-    dispatch = 0,
-    heartbeat = 1,
-    reconnect = 7,
-    invalid_session = 9,
-    hello = 10,
-    heatbeat_ack = 11
-};
-
-enum class op_send {
-    heartbeat = 1,
-    identify = 2,
-    status_update = 3,
-    voice_state_update = 4,
-    voice_server_ping = 5,
-    resume = 6,
-    request_guild_members = 8
-};
-
 class gateway
 {
 public:

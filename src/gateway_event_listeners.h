@@ -16,6 +16,24 @@ namespace gateway
 {
 class gateway;
 
+enum class op_recv {
+    dispatch = 0,
+    heartbeat = 1,
+    reconnect = 7,
+    invalid_session = 9,
+    hello = 10,
+    heartbeat_ack = 11
+};
+
+enum class op_send {
+    heartbeat = 1,
+    identify = 2,
+    status_update = 3,
+    voice_state_update = 4,
+    voice_server_ping = 5,
+    resume = 6,
+    request_guild_members = 8
+};
 namespace event_listener
 {
 struct base {
@@ -26,16 +44,16 @@ struct base {
     {
         return std::make_shared<T>(args...);
     }
-    virtual void handle(nlohmann::json &, const std::string &) = 0;
+    virtual void handle(op_recv op, const nlohmann::json &, const std::string &) = 0;
 };
 
 struct echo_listener : public base {
-    void handle(nlohmann::json &json, const std::string &type);
+    void handle(op_recv op, const nlohmann::json &json, const std::string &type);
 };
 
 struct hello_responder : public base {
     hello_responder(cmd::discord::api *api);
-    void handle(nlohmann::json &json, const std::string &type);
+    void handle(op_recv op, const nlohmann::json &json, const std::string &type);
 
 private:
     cmd::discord::api *api;
@@ -45,8 +63,8 @@ private:
 struct heartbeat_listener : public base {
     heartbeat_listener(cmd::discord::gateway::gateway *gateway);
     ~heartbeat_listener();
-    void heartbeat();
-    void handle(nlohmann::json &data, const std::string &);
+    void heartbeat_loop();
+    void handle(op_recv op, const nlohmann::json &data, const std::string &);
     void notify();
     void join();
 

@@ -3,7 +3,8 @@
 #include "gateway.h"
 #include "gateway_event_listeners.h"
 
-void cmd::discord::gateway::event_listener::echo_listener::handle(nlohmann::json &json,
+void cmd::discord::gateway::event_listener::echo_listener::handle(op_recv,
+                                                                  const nlohmann::json &json,
                                                                   const std::string &type)
 {
     std::cout << "Type: " << type << " ";
@@ -17,7 +18,8 @@ cmd::discord::gateway::event_listener::hello_responder::hello_responder(cmd::dis
 {
 }
 
-void cmd::discord::gateway::event_listener::hello_responder::handle(nlohmann::json &json,
+void cmd::discord::gateway::event_listener::hello_responder::handle(op_recv,
+                                                                    const nlohmann::json &json,
                                                                     const std::string &type)
 {
     if (json.is_null())
@@ -26,8 +28,18 @@ void cmd::discord::gateway::event_listener::hello_responder::handle(nlohmann::js
         std::string channel = json["channel_id"];
         std::string content = json["content"];
         std::string user = json["author"]["username"];
+
+        std::cout << user << ": " << content << " in " << channel << "\n";
+
         if (content.find("hi") != std::string::npos) {
-            api->send_message(channel, "hey " + user);
+            auto success = api->send_message(channel, "hey " + user);
+            if (success == api_result::success) {
+                std::cout << "Success!\n";
+            } else if (success == api_result::failure) {
+                std::cout << "Failure\n";
+            } else if (success == api_result::rate_limited) {
+                std::cout << "Rate limited\n";
+            }
         }
     }
 }
@@ -40,13 +52,11 @@ cmd::discord::gateway::event_listener::heartbeat_listener::heartbeat_listener(
 cmd::discord::gateway::event_listener::heartbeat_listener::~heartbeat_listener()
 {
     // Notify thread we are closing, then join it
-    std::cout << "Notifying heartbeat thread\n";
     notify();
-    std::cout << "Joining heartbeat thread\n";
     join();
 }
 
-void cmd::discord::gateway::event_listener::heartbeat_listener::heartbeat()
+void cmd::discord::gateway::event_listener::heartbeat_listener::heartbeat_loop()
 {
     while (true) {
         std::unique_lock<std::mutex> lock{thread_mutex};
@@ -57,17 +67,18 @@ void cmd::discord::gateway::event_listener::heartbeat_listener::heartbeat()
     }
 }
 
-void cmd::discord::gateway::event_listener::heartbeat_listener::handle(nlohmann::json &data,
+void cmd::discord::gateway::event_listener::heartbeat_listener::handle(op_recv op,
+                                                                       const nlohmann::json &data,
                                                                        const std::string &)
 {
-    if (first && !data.is_null()) {
-        if (data["heartbeat_interval"].is_number()) {
+    if (op == op_recv::hello && !data.is_null()) {
+        if (data["heartbeat_interval"].is_number())
             heartbeat_interval = data["heartbeat_interval"].get<int>();
-            first = false;
-        }
         std::cout << "Heartbeating every " << heartbeat_interval << " ms\n";
-        std::cout << "Spawning heartbeat thread\n";
-        heartbeat_thread = std::thread{&heartbeat_listener::heartbeat, this};
+        if (first)
+            heartbeat_thread = std::thread{&heartbeat_listener::heartbeat_loop, this};
+        first = false;
+    } else if (op == op_recv::heartbeat_ack) {
     }
 }
 
