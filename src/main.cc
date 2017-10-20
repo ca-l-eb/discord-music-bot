@@ -1,37 +1,27 @@
-#include <csignal>
-#include <fstream>
 #include <iostream>
-#include <string>
-#include <vector>
+#include <thread>
 
 #include <cmd/http_pool.h>
 #include <cmd/tls_socket.h>
 #include <cmd/websocket.h>
-#include <thread>
 
-#include "api.h"
-#include "gateway.h"
+#include <api.h>
+#include <events/echo_listener.h>
+#include <events/hello_responder.h>
+#include <gateway.h>
 
 int main(int argc, char *argv[])
 {
-    using namespace cmd::discord::gateway;
-
     if (argc < 1) {
-        std::cerr << "Usage: " << argv[0] << "<bot login file>\n";
+        std::cerr << "Usage: " << argv[0] << "<bot token>\n";
         return EXIT_FAILURE;
     }
-    std::string token;
-    std::ifstream ifs{argv[1]};
-    if (!ifs) {
-        std::cerr << "Could not open file " << argv[1] << "\n";
-        return EXIT_FAILURE;
-    }
-    std::getline(ifs, token);
-    ifs.close();
+    std::string token{argv[1]};
     if (token.length() != 59) {
         std::cerr << "Invalid token. Token should be 59 characters long\n";
         return EXIT_FAILURE;
     }
+
     try {
         auto connection = std::make_shared<cmd::tls_socket>();
         connection->connect("gateway.discord.gg", 443);
@@ -41,12 +31,11 @@ int main(int argc, char *argv[])
         sock.connect();
 
         cmd::discord::api api{token};
-        gateway gateway{sock, token};
+        cmd::discord::gateway gateway{sock, token};
 
-        gateway.register_listener(op_recv::dispatch,
-                                  event_listener::base::make<event_listener::echo_listener>());
-        gateway.register_listener(
-            op_recv::dispatch, event_listener::base::make<event_listener::hello_responder>(&api));
+        gateway.add_listener("echo", std::make_shared<cmd::discord::echo_listener>());
+        gateway.add_listener("hello_responder",
+                             std::make_shared<cmd::discord::hello_responder>(&api));
 
         // Get first n events each time calling corresponding bound event listeners
         for (int i = 0; i < 70; i++)

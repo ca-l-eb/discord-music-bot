@@ -6,24 +6,26 @@
 #include <mutex>
 #include <thread>
 
-#include "api.h"
-#include "gateway_event_listeners.h"
-#include "json.hpp"
+#include <api.h>
+#include <events/event_listener.h>
+#include <json.hpp>
 
 namespace cmd
 {
 namespace discord
-{
-namespace gateway
 {
 class gateway
 {
 public:
     explicit gateway(cmd::websocket::socket &sock, const std::string &token);
     ~gateway();
+    void add_listener(const std::string &name, event_listener::ptr h);
+    void remove_listener(const std::string &name);
     void next_event();
-    void register_listener(op_recv e, event_listener::base::ptr h);
     void heartbeat();
+
+    void join_voice_server(const std::string &guild_id, const std::string &channel_id);
+    void leave_voice_server(const std::string &guild_id, const std::string &channel_id);
 
 private:
     using clock = std::chrono::steady_clock;
@@ -31,17 +33,20 @@ private:
 
     cmd::websocket::socket sock;
     std::vector<unsigned char> buffer;
-    std::multimap<op_recv, event_listener::base::ptr> handlers;
+
+    std::map<std::string, event_listener::ptr> public_handlers;
+    std::multimap<gtw_op_recv, event_listener::ptr> private_handlers;
+
     std::string token;
     std::mutex write_mutex;
 
     clock::time_point last_msg_sent;
 
+    std::string user_id;
     int seq_num;
     const bool compress = false;
     const int large_threshold = 250;
 };
-}
 }
 }
 

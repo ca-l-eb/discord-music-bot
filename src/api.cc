@@ -18,28 +18,37 @@ cmd::discord::api::api(const std::string &token)
 cmd::discord::api_result cmd::discord::api::send_message(const std::string &channel_id,
                                                          const std::string &message)
 {
-    // Try to send the message twice, if the first time fails, we get updated
-    // rate limits so we know when the second message can successfully be sent
     http_request request{stream};
-    set_common_headers(request);
+    set_common_headers(request, true);
     request.set_request_method("POST");
     request.set_resource(api_base + "/channels/" + channel_id + "/messages");
     nlohmann::json body{{"content", message}};
     request.set_body(body.dump());
-    return check_success(request, 200, api_limit_param::channel_id);
+    return check_success(request, 200, api_limit_param::channel_id).result;
 }
 
-void cmd::discord::api::set_common_headers(cmd::http_request &request)
+void cmd::discord::api::set_common_headers(cmd::http_request &request, bool requires_auth)
 {
-    request.set_header("Authorization", "Bot " + token);
+    if (requires_auth)
+        request.set_header("Authorization", "Bot " + token);
     request.set_header("Content-Type", "application/json");
     request.set_header("User-Agent", "TestBot (https://alucard.io, v0.1)");
 }
 
-cmd::discord::api_result cmd::discord::api::check_success(cmd::http_request &request, int code,
-                                                          api_limit_param param)
+cmd::discord::api_response cmd::discord::api::check_success(cmd::http_request &request, int code,
+                                                            api_limit_param param)
 {
     std::lock_guard<std::mutex> guard(mutex);
+
+    // Make sure at least 300 milliseconds have passed since last message sent
+    auto now = clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_msg_sent);
+    if (duration.count() < 300) {
+        std::this_thread::sleep_for(duration);
+        last_msg_sent = now + duration;
+    } else {
+        last_msg_sent = now;
+    }
 
     auto &global = limits[api_limit_param::global];
     auto &specific = limits[param];
@@ -61,7 +70,7 @@ cmd::discord::api_result cmd::discord::api::check_success(cmd::http_request &req
             std::this_thread::sleep_for(std::chrono::seconds(sleep_for));
         }
         // Reset time passed, reset limits
-        if (reset >= specific.reset)
+        if (param != api_limit_param ::global && reset >= specific.reset)
             specific.remaining = specific.limit;
 
         if ((global.reset != 0 && reset >= global.reset) || global.remaining == 0)
@@ -74,16 +83,16 @@ cmd::discord::api_result cmd::discord::api::check_success(cmd::http_request &req
         auto limited = check_rate_limits(response, param);
 
         if (limited == api_result::rate_limited)
-            return api_result::rate_limited;
+            return {api_result::rate_limited, response};
         if (response.status_code() == code)
-            return api_result::success;
+            return {api_result::success, response};
+        return {api_result::failure, response};
     } catch (std::exception &e) {
         // Something happened, create new connection
         cmd::http_pool::mark_closed(sock->get_host(), sock->get_port());
         sock = cmd::http_pool::get_connection(sock->get_host(), sock->get_port(), true);
         stream = cmd::stream{sock};
     }
-    return api_result::failure;
 }
 
 cmd::discord::api_result cmd::discord::api::check_rate_limits(cmd::http_response &response,
@@ -125,6 +134,12 @@ cmd::discord::api_result cmd::discord::api::check_rate_limits(cmd::http_response
         }
         which = global ? limits[api_limit_param::global] : limits[param];
 
+        // NOTE: This might be wrong, or unnecessary,
+        // E.g. after 30 messages, get 429, global remaining will have been reset once to 20, and
+        // now be 10. After 429, global limit would become 10, which might severely limit output in
+        // certain scenarios since the actually global limit might be closer to 20, it really just
+        // depends on the rate at which it is sending at any given time because messages aren't
+        // constantly flowing. There is time in between messages for the rates to reset
         if (global) {
             // If global remaining has more, subtract the remaining amount
             // from the global limit to get closer to the actual global limit imposed by Discord
@@ -146,4 +161,13 @@ cmd::discord::api_result cmd::discord::api::check_rate_limits(cmd::http_response
     }
     // success does not really mean anything here, just signals not rate limited
     return api_result::success;
+}
+
+std::string cmd::discord::api::get_gateway()
+{
+    http_request request{stream};
+    set_common_headers(request, false);
+    request.set_resource(api_base + "/gateway/bot");
+    auto success = check_success(request, 200, api_limit_param::global);
+    return "";
 }

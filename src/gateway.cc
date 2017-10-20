@@ -1,15 +1,15 @@
-#include <future>
-
 #include "gateway.h"
+#include <events/heartbeater.h>
+#include <events/voice_state_listener.h>
 
-cmd::discord::gateway::gateway::gateway(cmd::websocket::socket &sock, const std::string &token)
+cmd::discord::gateway::gateway(cmd::websocket::socket &sock, const std::string &token)
     : sock{sock}, token{token}
 {
-    // On hello opcode, spawns a thread and periodically sends a heartbeat message through this
+    // On hello opcode, spawns a thread and periodically sends a heartbeat message through *this
     // gateway. On destruction it stops the heartbeat thread and joins it
-    auto heartbeater = event_listener::base::make<event_listener::heartbeat_listener>(this);
-    register_listener(op_recv::hello, heartbeater);
-    register_listener(op_recv::heartbeat_ack, heartbeater);
+    auto beat = std::make_shared<heartbeater>(this);
+    private_handlers.emplace(gtw_op_recv::hello, beat);
+    private_handlers.emplace(gtw_op_recv::heartbeat_ack, beat);
 
     nlohmann::json identify{
         {"op", 2},
@@ -23,9 +23,9 @@ cmd::discord::gateway::gateway::gateway(cmd::websocket::socket &sock, const std:
     sock.send(message);
 }
 
-cmd::discord::gateway::gateway::~gateway() {}
+cmd::discord::gateway::~gateway() {}
 
-void cmd::discord::gateway::gateway::next_event()
+void cmd::discord::gateway::next_event()
 {
     // Read the next message from the WebSocket and place it in buffer
     sock.next_message(buffer);
@@ -44,43 +44,48 @@ void cmd::discord::gateway::gateway::next_event()
         }
         std::string t_val = json["t"].is_string() ? json["t"].get<std::string>() : "";
 
-        auto gateway_op = static_cast<op_recv>(op_val);
+        auto gateway_op = static_cast<gtw_op_recv>(op_val);
         switch (gateway_op) {
-            case op_recv::dispatch:
+            case gtw_op_recv::dispatch:
+                // Run all public dispactch handlers
+                for (auto &handler : public_handlers) {
+                    handler.second->handle(gateway_op, d, t_val);
+                }
                 break;
-            case op_recv::heartbeat:
+            case gtw_op_recv::heartbeat:
                 heartbeat();  // Respond to heartbeats with a heartbeat
                 break;
-            case op_recv::reconnect:
+            case gtw_op_recv::reconnect:
                 break;
-            case op_recv::invalid_session:
+            case gtw_op_recv::invalid_session:
                 break;
-            case op_recv::hello:
+            case gtw_op_recv::hello:
                 break;
-            case op_recv::heartbeat_ack:
+            case gtw_op_recv::heartbeat_ack:
                 break;
             default:
                 throw std::runtime_error("Unknown opcode: " + std::to_string(op_val));
         }
-        auto range = handlers.equal_range(gateway_op);
-        for (auto it = range.first; it != range.second; ++it) {
-            it->second->handle(gateway_op, d, t_val);
-        }
     }
 }
 
-void cmd::discord::gateway::gateway::register_listener(op_recv e, event_listener::base::ptr h)
+void cmd::discord::gateway::add_listener(const std::string &name, event_listener::ptr h)
 {
-    handlers.emplace(e, h);
+    public_handlers.emplace(name, h);
 }
 
-void cmd::discord::gateway::gateway::heartbeat()
+void cmd::discord::gateway::remove_listener(const std::string &name)
 {
-    nlohmann::json json{{"op", static_cast<int>(op_send::heartbeat)}, {"d", seq_num}};
+    public_handlers.erase(name);
+}
+
+void cmd::discord::gateway::heartbeat()
+{
+    nlohmann::json json{{"op", static_cast<int>(gtw_op_send::heartbeat)}, {"d", seq_num}};
     safe_send(json.dump());
 }
 
-void cmd::discord::gateway::gateway::safe_send(const std::string &s)
+void cmd::discord::gateway::safe_send(const std::string &s)
 {
     std::lock_guard<std::mutex> guard{write_mutex};
     // Rate limit gateway messages, allow 1 message every 0.5 seconds
@@ -93,4 +98,23 @@ void cmd::discord::gateway::gateway::safe_send(const std::string &s)
         last_msg_sent = now;
     }
     sock.send(s);
+}
+
+void cmd::discord::gateway::join_voice_server(const std::string &guild_id,
+                                              const std::string &channel_id)
+{
+    nlohmann::json json{{"op", static_cast<int>(gtw_op_send::voice_state_update)},
+                        {"d",
+                         {{"guild_id", guild_id},
+                          {"channel_id", channel_id},
+                          {"self_mute", false},
+                          {"self_deaf", false}}}};
+    std::string name = user_id + guild_id + channel_id + "voice_state_listener";
+    add_listener(name, std::make_shared<voice_state_listener>(this, user_id, guild_id, channel_id));
+    safe_send(json.dump(0));
+}
+
+void cmd::discord::gateway::leave_voice_server(const std::string &guild_id,
+                                               const std::string &channel_id)
+{
 }
