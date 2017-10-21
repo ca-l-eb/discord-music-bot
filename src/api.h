@@ -26,7 +26,7 @@ struct api_response {
 class api
 {
 public:
-    api(const std::string &token);
+    explicit api(const std::string &token);
     api(const api &) = delete;
     api &operator=(const api &) = delete;
     ~api() = default;
@@ -35,9 +35,7 @@ public:
 
 private:
     using clock = std::chrono::system_clock;
-    const std::string api_base = "/api/v6";
-    cmd::socket::ptr sock;
-    cmd::stream stream;
+    const std::string api_base = "https://discordapp.com/api/v6";
     std::string token;
     std::mutex mutex;
     std::map<api_limit_param, rate_limit> limits;

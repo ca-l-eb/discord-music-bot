@@ -6,7 +6,7 @@
 #include "json.hpp"
 
 cmd::discord::api::api(const std::string &token)
-    : sock{cmd::http_pool::get_connection("discordapp.com", 443, true)}, stream{sock}, token{token}
+    : token{token}
 {
     // Guess that the global limit is around 20
     limits[api_limit_param::global] = {20, 20, 0};
@@ -18,10 +18,9 @@ cmd::discord::api::api(const std::string &token)
 cmd::discord::api_result cmd::discord::api::send_message(const std::string &channel_id,
                                                          const std::string &message)
 {
-    http_request request{stream};
+    http_request request{api_base + "/channels/" + channel_id + "/messages"};
     set_common_headers(request, true);
     request.set_request_method("POST");
-    request.set_resource(api_base + "/channels/" + channel_id + "/messages");
     nlohmann::json body{{"content", message}};
     request.set_body(body.dump());
     return check_success(request, 200, api_limit_param::channel_id).result;
@@ -88,10 +87,7 @@ cmd::discord::api_response cmd::discord::api::check_success(cmd::http_request &r
             return {api_result::success, response};
         return {api_result::failure, response};
     } catch (std::exception &e) {
-        // Something happened, create new connection
-        cmd::http_pool::mark_closed(sock->get_host(), sock->get_port());
-        sock = cmd::http_pool::get_connection(sock->get_host(), sock->get_port(), true);
-        stream = cmd::stream{sock};
+        cmd::http_pool::mark_closed("discordapp.com", 443);
     }
 }
 
@@ -122,7 +118,7 @@ cmd::discord::api_result cmd::discord::api::check_rate_limits(cmd::http_response
         // First check header for when to retry if 'retry-after' field is present
         // otherwise fallback by checking body.
         auto retry_after = headers.find("retry-after");
-        int retry_time_ms;
+        int retry_time_ms = 10000;
         if (retry_after != headers.end()) {
             retry_time_ms = std::stoi(retry_after->second);
         } else {
@@ -165,9 +161,8 @@ cmd::discord::api_result cmd::discord::api::check_rate_limits(cmd::http_response
 
 std::string cmd::discord::api::get_gateway()
 {
-    http_request request{stream};
+    http_request request{api_base + "/gateway/bot"};
     set_common_headers(request, false);
-    request.set_resource(api_base + "/gateway/bot");
     auto success = check_success(request, 200, api_limit_param::global);
     return "";
 }
