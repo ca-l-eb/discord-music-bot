@@ -12,8 +12,6 @@ namespace cmd
 {
 namespace discord
 {
-class gateway;
-
 enum class gtw_op_recv {
     dispatch = 0,
     heartbeat = 1,
@@ -33,9 +31,12 @@ enum class gtw_op_send {
     request_guild_members = 8
 };
 
+class gateway;
+
 struct event_listener {
     using ptr = std::shared_ptr<event_listener>;
-    virtual void handle(gtw_op_recv, const nlohmann::json &, const std::string &) = 0;
+    virtual void handle(cmd::discord::gateway &gateway, gtw_op_recv, const nlohmann::json &,
+                        const std::string &) = 0;
 };
 }
 }

@@ -8,7 +8,8 @@ namespace cmd
 namespace discord
 {
 struct echo_listener : public event_listener {
-    void handle(gtw_op_recv, const nlohmann::json &json, const std::string &type) override;
+    void handle(cmd::discord::gateway &, gtw_op_recv, const nlohmann::json &json,
+                const std::string &type) override;
 };
 }
 }

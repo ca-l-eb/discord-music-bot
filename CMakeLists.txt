@@ -9,7 +9,7 @@ find_package(Threads REQUIRED)
 set(SOURCE_FILES
         src/api.cc
         src/events/echo_listener.cc
-        src/events/heartbeater.cc
+        src/heartbeater.cc
         src/events/hello_responder.cc
         src/events/voice_state_listener.cc
         src/gateway.cc
@@ -20,8 +20,7 @@ set(HEADER_FILES
         src/api.h
         src/events/echo_listener.h
         src/events/event_listener.h
-        src/events/heartbeater.h
-        src/events/hello_responder.h
+        src/heartbeater.h
         src/events/hello_responder.h
         src/events/voice_state_listener.h
         src/gateway.h
