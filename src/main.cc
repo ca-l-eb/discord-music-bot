@@ -1,6 +1,6 @@
+#include <csignal>
 #include <iostream>
 #include <thread>
-#include <csignal>
 
 #include <cmd/http_pool.h>
 #include <cmd/tls_socket.h>
@@ -28,17 +28,19 @@ int main(int argc, char *argv[])
         cmd::discord::api api{token};
         cmd::discord::gateway gateway{token};
 
-//        gateway.add_listener("ALL", "echo", std::make_shared<cmd::discord::echo_listener>());
+        //        gateway.add_listener("ALL", "echo",
+        //        std::make_shared<cmd::discord::echo_listener>());
         gateway.add_listener("MESSAGE_CREATE", "hello_responder",
                              std::make_shared<cmd::discord::hello_responder>(api));
 
         gateway.identify();
 
-//         Run a few events then join voice server
+        //         Run a few events then join voice server
         for (int i = 0; i < 5; i++)
             gateway.next_event();
 
         gateway.join_voice_server("179378178601517056", "183719700826423298");
+        //gateway.join_voice_server("312472384026181632", "312472384026181633");
 
         // Get first n events each time calling corresponding bound event listeners
         for (int i = 0; i < 70; i++)

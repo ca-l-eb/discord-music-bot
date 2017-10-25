@@ -1,6 +1,7 @@
 #ifndef CMD_DISCORD_VOICE_GATEWAY_H
 #define CMD_DISCORD_VOICE_GATEWAY_H
 
+#include <cmd/udp_socket.h>
 #include <cmd/websocket.h>
 #include <events/event_listener.h>
 #include "heartbeater.h"
@@ -49,10 +50,11 @@ private:
     void ip_discovery();
     void notify_heartbeater_hello(nlohmann::json &data);
     void select(uint16_t local_udp_port);
+    void play_audio(const std::string &youtube_url);
+    void write_header(unsigned char *buffer, uint16_t seq_num, uint32_t timestamp);
 
     cmd::websocket websocket;
     std::vector<unsigned char> buffer;
-
     std::string url, user_id, session_id, guild_id, token;
 
     std::mutex write_mutex;
@@ -61,12 +63,15 @@ private:
     heartbeater beater;
     enum class connection_state { disconnected, connected } state;
 
+    std::thread audio_thread;
+
     uint32_t ssrc;
     uint16_t udp_port;
-    std::vector<std::string> voice_modes;
-    std::string voice_mode_using;
-    std::string external_ip;
     std::vector<uint8_t> secret_key;
+
+    cmd::udp_socket udp_socket;
+    cmd::inet_addr voice_addr;
+    std::string external_ip;
 };
 }
 }
