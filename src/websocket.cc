@@ -168,10 +168,10 @@ void websocket::close(websocket_status_code code)
     buf[0] = static_cast<unsigned char>((close_status & 0xFF00) >> 8);
     buf[1] = static_cast<unsigned char>(close_status & 0x00FF);
 
-    build_frame_and_send_async(buf, sizeof(buf), websocket_opcode::close,
-                               [=](const boost::system::error_code &e, size_t) {
-                                    std::cout << "Close frame send with value: " << close_status << "\n";
-                               });
+    build_frame_and_send_async(
+        buf, sizeof(buf), websocket_opcode::close, [=](const boost::system::error_code &e, size_t) {
+            std::cout << "Close frame send with value: " << close_status << "\n";
+        });
 }
 
 void websocket::async_send(const std::string &str, websocket::message_sent_callback c)
@@ -396,10 +396,9 @@ void websocket::handle_frame()
 void websocket::pong(const uint8_t *msg, size_t len)
 {
     // At most, send 125 bytes in control frame
-    build_frame_and_send_async(msg, std::min(len, (size_t) 125), websocket_opcode::pong,
-                               [](const boost::system::error_code &e, size_t) {
-                                    std::cout << "Sent pong\n";
-                               });
+    build_frame_and_send_async(
+        msg, std::min(len, (size_t) 125), websocket_opcode::pong,
+        [](const boost::system::error_code &e, size_t) { std::cout << "Sent pong\n"; });
 }
 
 websocket::frame_parser::frame_parser()

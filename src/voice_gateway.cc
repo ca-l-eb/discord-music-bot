@@ -3,8 +3,8 @@
 #include <iostream>
 #include <json.hpp>
 
-#include "crypto.h"
 #include <sodium/crypto_secretbox.h>
+#include "crypto.h"
 #include "opus_encoder.h"
 #include "voice_gateway.h"
 
@@ -155,7 +155,8 @@ void cmd::discord::voice_gateway::extract_session_info(nlohmann::json &data)
         secret_key = key.get<std::vector<uint8_t>>();
 
     if (secret_key.size() != 32)
-        throw std::runtime_error("Expected 32 byte secret key but got " + std::to_string(secret_key.size()));
+        throw std::runtime_error("Expected 32 byte secret key but got " +
+                                 std::to_string(secret_key.size()));
 
     audio_thread = std::thread{&voice_gateway::play_audio, this,
                                "https://www.youtube.com/watch?v=iTuhpJBBvCc"};
@@ -248,21 +249,20 @@ void cmd::discord::voice_gateway::stop_speaking()
 
 void cmd::discord::voice_gateway::play_audio(const std::string &youtube_url)
 {
-
-//    cmd::inet_addr other;
-//    unsigned char buffer[512];
-//    while (true) {
-//        auto read = udp_socket.recv(other, buffer, sizeof(buffer), 0, 5000);
-//        std::cout << "Read " << read << " bytes\n";
-//        if (read == 0)
-//            return;
-//        auto flags = std::cerr.flags();
-//        for (int i = 0; i < read; i++) {
-//            std::cerr << std::setw(3) << std::hex << (int) buffer[i]; 
-//        }
-//        std::cerr.flags(flags);
-//        std::cerr << "\n";
-//    }
+    //    cmd::inet_addr other;
+    //    unsigned char buffer[512];
+    //    while (true) {
+    //        auto read = udp_socket.recv(other, buffer, sizeof(buffer), 0, 5000);
+    //        std::cout << "Read " << read << " bytes\n";
+    //        if (read == 0)
+    //            return;
+    //        auto flags = std::cerr.flags();
+    //        for (int i = 0; i < read; i++) {
+    //            std::cerr << std::setw(3) << std::hex << (int) buffer[i];
+    //        }
+    //        std::cerr.flags(flags);
+    //        std::cerr << "\n";
+    //    }
     std::cerr << "Using " << youtube_url << "\n";
     boost::process::pipe audio_transport_pipe;
     boost::process::pipe audio_read_src;
@@ -273,7 +273,7 @@ void cmd::discord::voice_gateway::play_audio(const std::string &youtube_url)
 
     boost::process::child ffmpeg{
         "ffmpeg -i - -ac 2 -f s16le -", boost::process::std_out > audio_read_src,
-        boost::process::std_in < audio_transport_pipe, boost::process::std_err > boost::process::null};
+        boost::process::std_in<audio_transport_pipe, boost::process::std_err> boost::process::null};
 
     start_speaking();
     stop_speaking();
@@ -323,7 +323,6 @@ void cmd::discord::voice_gateway::play_audio(const std::string &youtube_url)
                                          sizeof(opus_encoded_buffer));
         std::cerr << "encoded-len=" << encoded_len << " ";
 
-
         std::cerr << "[";
         auto flags = std::cerr.flags();
         for (int i = 0; i < 12; i++)
@@ -341,15 +340,16 @@ void cmd::discord::voice_gateway::play_audio(const std::string &youtube_url)
         // Wait a while before sending next packet
         std::this_thread::sleep_for(std::chrono::milliseconds(17));
 
-        auto wrote = udp_socket.send(voice_addr, rtp_buffer, 12 + encoded_len + crypto_secretbox_MACBYTES, 0);
+        auto wrote = udp_socket.send(voice_addr, rtp_buffer,
+                                     12 + encoded_len + crypto_secretbox_MACBYTES, 0);
         if (wrote != 12 + encoded_len + crypto_secretbox_MACBYTES) {
             std::cerr << "\nCould not send entire RTP frame. Sent " << wrote << " out of "
                       << (12 + encoded_len) << " bytes\n";
             break;
         }
-        std::cerr << " wrote " << wrote << " " << voice_addr.to_string() << " " << voice_addr.get_port() << "\n";
+        std::cerr << " wrote " << wrote << " " << voice_addr.to_string() << " "
+                  << voice_addr.get_port() << "\n";
         std::cerr.flush();
-
     }
     stop_speaking();
 
@@ -373,8 +373,8 @@ void cmd::discord::voice_gateway::write_header(unsigned char *buffer, uint16_t s
     buffer[6] = (timestamp & 0x0000FF00) >> 8;
     buffer[7] = (timestamp & 0x000000FF);
 
-    buffer[8] =  (ssrc & 0xFF000000) >> 24;
-    buffer[9] =  (ssrc & 0x00FF0000) >> 16;
+    buffer[8] = (ssrc & 0xFF000000) >> 24;
+    buffer[9] = (ssrc & 0x00FF0000) >> 16;
     buffer[10] = (ssrc & 0x0000FF00) >> 8;
     buffer[11] = (ssrc & 0x000000FF);
 }

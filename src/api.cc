@@ -5,8 +5,7 @@
 #include "api.h"
 #include "json.hpp"
 
-cmd::discord::api::api(const std::string &token)
-    : token{token}
+cmd::discord::api::api(const std::string &token) : token{token}
 {
     // Guess that the global limit is around 20
     limits[api_limit_param::global] = {20, 20, 0};

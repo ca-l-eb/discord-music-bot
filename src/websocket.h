@@ -44,7 +44,8 @@ public:
         }
         bool equivalent(const std::error_code &code, int condition) const noexcept
         {
-            return &code.category() == this && static_cast<int>(code.value()) == condition;;
+            return &code.category() == this && static_cast<int>(code.value()) == condition;
+            ;
         }
     };
 

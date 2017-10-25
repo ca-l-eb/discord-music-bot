@@ -51,7 +51,7 @@ void cmd::discord::gateway::next_event()
         throw std::runtime_error("WebSocket connection interrupted");
     }
     std::cout << "GATEWAY: ";
-    std::cout.write((char*) buffer.data(), read);
+    std::cout.write((char *) buffer.data(), read);
     std::cout << "\n";
 
     // Parse the results as a json object
