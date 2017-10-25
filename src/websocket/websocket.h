@@ -5,9 +5,11 @@
 #include <string>
 #include <vector>
 
-#include "http_response.h"
-#include "websocket_values.h"
+#include <http_response.h>
+#include <websocket_values.h>
 
+namespace cmd
+{
 class websocket
 {
 public:
@@ -22,11 +24,11 @@ public:
     class websocket_category : public std::error_category, public boost::system::error_category
     {
     public:
-        const char *name() const noexcept
+        virtual const char *name() const noexcept
         {
             return "WebSocket";
         }
-        std::string message(int ev) const noexcept
+        virtual std::string message(int ev) const noexcept
         {
             switch (error(ev)) {
                 case error::websocket_connection_closed:
@@ -42,10 +44,9 @@ public:
             }
             return "Unknown WebSocket error";
         }
-        bool equivalent(const std::error_code &code, int condition) const noexcept
+        virtual bool equivalent(const std::error_code &code, int condition) const noexcept
         {
             return &code.category() == this && static_cast<int>(code.value()) == condition;
-            ;
         }
     };
 
@@ -153,12 +154,14 @@ private:
 
     void pong(const uint8_t *msg, size_t len);
 };
+}
 
 template<>
-struct std::is_error_code_enum<websocket::error> : public std::true_type {
+struct std::is_error_code_enum<cmd::websocket::error> : public std::true_type {
 };
+
 template<>
-struct boost::system::is_error_code_enum<websocket::error> : public boost::true_type {
+struct boost::system::is_error_code_enum<cmd::websocket::error> : public boost::true_type {
 };
 
 #endif

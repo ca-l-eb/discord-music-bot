@@ -13,17 +13,17 @@ using random_byte_engine =
 thread_local random_byte_engine generator{
     static_cast<unsigned char>(std::chrono::system_clock::now().time_since_epoch().count())};
 
-websocket::websocket(boost::asio::io_service &service)
+cmd::websocket::websocket(boost::asio::io_service &service)
     : io{service}, socket{service}, close_status{0}
 {
 }
 
-websocket::~websocket()
+cmd::websocket::~websocket()
 {
     close();
 }
 
-void websocket::async_connect(const std::string &host, const std::string &service,
+void cmd::websocket::async_connect(const std::string &host, const std::string &service,
                               const std::string &resource, bool secure, connect_callback c)
 {
     this->host = host;
@@ -38,7 +38,7 @@ void websocket::async_connect(const std::string &host, const std::string &servic
     //                           boost::asio::placeholders::iterator, c));
 }
 
-void websocket::on_resolve(const ::boost::system::error_code &e, endpoint_iterator it,
+void cmd::websocket::on_resolve(const ::boost::system::error_code &e, endpoint_iterator it,
                            connect_callback c)
 {
     if (e) {
@@ -51,7 +51,7 @@ void websocket::on_resolve(const ::boost::system::error_code &e, endpoint_iterat
     }
 }
 
-void websocket::on_connect(const boost::system::error_code &e, endpoint_iterator it,
+void cmd::websocket::on_connect(const boost::system::error_code &e, endpoint_iterator it,
                            connect_callback c)
 {
     if (!e) {
@@ -97,7 +97,7 @@ void websocket::on_connect(const boost::system::error_code &e, endpoint_iterator
     }
 }
 
-void websocket::on_websocket_upgrade_sent(const boost::system::error_code &e, connect_callback c)
+void cmd::websocket::on_websocket_upgrade_sent(const boost::system::error_code &e, connect_callback c)
 {
     if (e) {
         c(e);
@@ -110,7 +110,7 @@ void websocket::on_websocket_upgrade_sent(const boost::system::error_code &e, co
                                        boost::asio::placeholders::bytes_transferred, c));
 }
 
-void websocket::on_websocket_upgrade_receive(const boost::system::error_code &e, size_t transferred,
+void cmd::websocket::on_websocket_upgrade_receive(const boost::system::error_code &e, size_t transferred,
                                              connect_callback c)
 {
     if (e) {
@@ -134,7 +134,7 @@ void websocket::on_websocket_upgrade_receive(const boost::system::error_code &e,
     }
 }
 
-void websocket::check_websocket_upgrade(connect_callback c)
+void cmd::websocket::check_websocket_upgrade(connect_callback c)
 {
     if (response.status_code() != 101) {
         // No version renegotiation. We only support WebSocket v13
@@ -155,7 +155,7 @@ void websocket::check_websocket_upgrade(connect_callback c)
     }
 }
 
-void websocket::close(websocket_status_code code)
+void cmd::websocket::close(websocket_status_code code)
 {
     // TODO: check if we are sending in response, or initiating close
     if (close_status)
@@ -174,17 +174,22 @@ void websocket::close(websocket_status_code code)
         });
 }
 
-void websocket::async_send(const std::string &str, websocket::message_sent_callback c)
+uint16_t cmd::websocket::close_code()
+{
+    return close_status;
+}
+
+void cmd::websocket::async_send(const std::string &str, websocket::message_sent_callback c)
 {
     build_frame_and_send_async(str.c_str(), str.size(), websocket_opcode::text, c);
 }
 
-void websocket::async_send(const void *buffer, size_t size, websocket::message_sent_callback c)
+void cmd::websocket::async_send(const void *buffer, size_t size, websocket::message_sent_callback c)
 {
     build_frame_and_send_async(buffer, size, websocket_opcode::text, c);
 }
 
-void websocket::build_frame_and_send_async(const void *data, size_t len, websocket_opcode op,
+void cmd::websocket::build_frame_and_send_async(const void *data, size_t len, websocket_opcode op,
                                            message_sent_callback c)
 {
     // out_size is the size of the buffer data + WebSocket frame
@@ -205,7 +210,7 @@ void websocket::build_frame_and_send_async(const void *data, size_t len, websock
 }
 
 // Return the number bytes needed to encoded WebSocket frame + bytes
-size_t websocket::get_frame_size(size_t bytes)
+size_t cmd::websocket::get_frame_size(size_t bytes)
 {
     if (bytes < 126)
         return bytes + 6;
@@ -214,7 +219,7 @@ size_t websocket::get_frame_size(size_t bytes)
     return bytes + 14;
 }
 
-void websocket::write_frame_size(uint8_t *frame, size_t size)
+void cmd::websocket::write_frame_size(uint8_t *frame, size_t size)
 {
     const uint8_t mask_bit = 0x80;
     if (size < 126) {
@@ -237,7 +242,7 @@ void websocket::write_frame_size(uint8_t *frame, size_t size)
 }
 
 // Assumes there is room in 'out' for size + 4 bytes
-void websocket::write_masked_data(const uint8_t *in, uint8_t *out, size_t size)
+void cmd::websocket::write_masked_data(const uint8_t *in, uint8_t *out, size_t size)
 {
     auto mask0 = generator();
     auto mask1 = generator();
@@ -264,7 +269,7 @@ void websocket::write_masked_data(const uint8_t *in, uint8_t *out, size_t size)
         *out++ = *in++ ^ mask2;
 }
 
-void websocket::async_next_message(message_received_callback c)
+void cmd::websocket::async_next_message(message_received_callback c)
 {
     // If the connection has been closed, notify the caller immediately
     if (close_status) {
@@ -287,7 +292,7 @@ void websocket::async_next_message(message_received_callback c)
     check_parser_state();
 }
 
-void websocket::check_parser_state()
+void cmd::websocket::check_parser_state()
 {
     // If we're closed, don't bother trying to read more
     //    if (close_status)
@@ -307,7 +312,7 @@ void websocket::check_parser_state()
     }
 }
 
-void websocket::enqueue_read(size_t amount)
+void cmd::websocket::enqueue_read(size_t amount)
 {
     auto mutable_buf = message_response.prepare(amount);
     socket.async_receive(mutable_buf, boost::bind(&websocket::on_websocket_data_receive, this,
@@ -315,7 +320,7 @@ void websocket::enqueue_read(size_t amount)
                                                   boost::asio::placeholders::bytes_transferred));
 }
 
-void websocket::enqueue_read_some(size_t amount)
+void cmd::websocket::enqueue_read_some(size_t amount)
 {
     auto mutable_buf = message_response.prepare(amount);
     socket.async_read_some(mutable_buf, boost::bind(&websocket::on_websocket_data_receive, this,
@@ -323,7 +328,7 @@ void websocket::enqueue_read_some(size_t amount)
                                                     boost::asio::placeholders::bytes_transferred));
 }
 
-void websocket::on_websocket_data_receive(const boost::system::error_code &e, size_t transferred)
+void cmd::websocket::on_websocket_data_receive(const boost::system::error_code &e, size_t transferred)
 {
     if (e) {
         std::cerr << "Websocket message data receive error: " << e.message() << "\n";
@@ -340,7 +345,7 @@ void websocket::on_websocket_data_receive(const boost::system::error_code &e, si
     check_parser_state();
 }
 
-void websocket::handle_frame()
+void cmd::websocket::handle_frame()
 {
     const auto *data = boost::asio::buffer_cast<const uint8_t *>(message_response.data());
     auto size = parser.get_size();
@@ -393,7 +398,7 @@ void websocket::handle_frame()
     }
 }
 
-void websocket::pong(const uint8_t *msg, size_t len)
+void cmd::websocket::pong(const uint8_t *msg, size_t len)
 {
     // At most, send 125 bytes in control frame
     build_frame_and_send_async(
@@ -401,12 +406,12 @@ void websocket::pong(const uint8_t *msg, size_t len)
         [](const boost::system::error_code &e, size_t) { std::cout << "Sent pong\n"; });
 }
 
-websocket::frame_parser::frame_parser()
+cmd::websocket::frame_parser::frame_parser()
 {
     reset();
 }
 
-void websocket::frame_parser::parse(boost::asio::streambuf &source)
+void cmd::websocket::frame_parser::parse(boost::asio::streambuf &source)
 {
     if (state == parse_state::begin) {
         parse_frame(source);
@@ -416,7 +421,7 @@ void websocket::frame_parser::parse(boost::asio::streambuf &source)
     }
 }
 
-void websocket::frame_parser::reset()
+void cmd::websocket::frame_parser::reset()
 {
     fin_frame = false;
     masked = false;
@@ -426,7 +431,7 @@ void websocket::frame_parser::reset()
     f_type = websocket_opcode::none;
 }
 
-void websocket::frame_parser::parse_frame(boost::asio::streambuf &buf)
+void cmd::websocket::frame_parser::parse_frame(boost::asio::streambuf &buf)
 {
     const auto *data = boost::asio::buffer_cast<const uint8_t *>(buf.data());
     if (buf.size() > 0) {
@@ -437,7 +442,7 @@ void websocket::frame_parser::parse_frame(boost::asio::streambuf &buf)
     }
 }
 
-void websocket::frame_parser::parse_payload_length(boost::asio::streambuf &buf)
+void cmd::websocket::frame_parser::parse_payload_length(boost::asio::streambuf &buf)
 {
     const auto *data = boost::asio::buffer_cast<const uint8_t *>(buf.data());
     if (size == 0 && buf.size() > 0) {
@@ -465,32 +470,32 @@ void websocket::frame_parser::parse_payload_length(boost::asio::streambuf &buf)
     }
 }
 
-bool websocket::frame_parser::is_frame_complete()
+bool cmd::websocket::frame_parser::is_frame_complete()
 {
     return state == parse_state::frame_done;
 }
 
-websocket_opcode websocket::frame_parser::frame_type()
+websocket_opcode cmd::websocket::frame_parser::frame_type()
 {
     return f_type;
 }
 
-uint64_t websocket::frame_parser::get_size()
+uint64_t cmd::websocket::frame_parser::get_size()
 {
     return size;
 }
 
-bool websocket::frame_parser::is_fin()
+bool cmd::websocket::frame_parser::is_fin()
 {
     return fin_frame;
 }
 
-bool websocket::frame_parser::is_masked()
+bool cmd::websocket::frame_parser::is_masked()
 {
     return masked;
 }
 
-bool websocket::frame_parser::is_new_state()
+bool cmd::websocket::frame_parser::is_new_state()
 {
     return size == 0 && f_type == websocket_opcode::none;
 }
