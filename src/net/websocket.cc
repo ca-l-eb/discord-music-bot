@@ -6,6 +6,7 @@
 #include <random>
 
 #include "base64.h"
+#include "resource_parser.h"
 #include "websocket.h"
 
 using random_byte_engine =
@@ -28,12 +29,16 @@ cmd::websocket::~websocket()
 }
 
 void cmd::websocket::async_connect(const std::string &host, const std::string &service,
-                                   const std::string &resource, bool secure,
+                                   const std::string &resource,
                                    message_sent_callback c)
 {
     this->host = host;
     this->resource = resource;
     this->connect_callback = c;
+
+    // wss uses the same port as https, https well known port
+    if (service == "wss")
+        service == "https";
 
     boost::asio::ip::tcp::resolver resolver{io};
     boost::asio::ip::tcp::resolver::query query{host, service};
@@ -41,9 +46,10 @@ void cmd::websocket::async_connect(const std::string &host, const std::string &s
 
     // Connect the underlying TCP socket
     boost::asio::connect(socket.lowest_layer(), endpoints);
-    secure_connection = secure;
 
-    if (secure) {
+    secure_connection = (service == "443" || service == "https");
+
+    if (secure_connection) {
         //        socket.lowest_layer().set_option(boost::asio::ip::tcp::no_delay(true));
         do_handshake();
     }
@@ -53,6 +59,22 @@ void cmd::websocket::async_connect(const std::string &host, const std::string &s
     // error. Currently the connect will throw an exception if it cannot connect or bad
     // handshake
     send_upgrade();
+}
+
+void cmd::websocket::async_connect(const std::string &url, cmd::websocket::message_sent_callback c)
+{
+    std::string proto;
+    int port;
+    std::tie(proto, host, port, resource) = cmd::resource_parser::parse(url);
+
+    // Use unsecure connection by default if resource parser couldn't determine a port
+    if (port == -1)
+        proto = "http";
+
+    if (port == 443)
+        proto = "https";
+
+    async_connect(host, proto, resource, c);
 }
 
 void cmd::websocket::do_handshake()

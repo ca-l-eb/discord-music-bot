@@ -5,8 +5,9 @@
 #include <boost/asio/ssl.hpp>
 #include <string>
 
-#include <http_response.h>
+#include <net/http_response.h>
 #include <deque>
+#include <cstdint>
 
 namespace cmd
 {
@@ -41,7 +42,7 @@ public:
         tls_handshake_error = 1015  // don't send
     };
 
-    enum class error {
+    enum class  error {
         websocket_connection_closed = 1,
         upgrade_failed,
         bad_upgrade_key,
@@ -90,12 +91,12 @@ public:
         return instance;
     }
 
-    std::error_code make_error_code(websocket::error code) noexcept
+    static std::error_code make_error_code(websocket::error code) noexcept
     {
         return std::error_code{(int) code, websocket_error_category()};
     }
 
-    boost::system::error_code boost_make_error_code(websocket::error code) noexcept
+    static boost::system::error_code boost_make_error_code(websocket::error code) noexcept
     {
         return boost::system::error_code{(int) code, boost_websocket_error_category()};
     }
@@ -109,7 +110,8 @@ public:
     websocket &operator=(const websocket &) = delete;
     ~websocket();
     void async_connect(const std::string &host, const std::string &service,
-                       const std::string &resource, bool secure, message_sent_callback c);
+                       const std::string &resource, message_sent_callback c);
+    void async_connect(const std::string &url, message_sent_callback c);
     void async_send(const std::string &str, message_sent_callback c);
     void async_send(const void *buffer, size_t len, message_sent_callback c);
     void async_next_message(message_received_callback c);
