@@ -7,30 +7,12 @@
 
 #include <api.h>
 #include <json.hpp>
+#include <opcodes.h>
 
 namespace cmd
 {
 namespace discord
 {
-enum class gtw_op_recv {
-    dispatch = 0,
-    heartbeat = 1,
-    reconnect = 7,
-    invalid_session = 9,
-    hello = 10,
-    heartbeat_ack = 11
-};
-
-enum class gtw_op_send {
-    heartbeat = 1,
-    identify = 2,
-    status_update = 3,
-    voice_state_update = 4,
-    voice_server_ping = 5,
-    resume = 6,
-    request_guild_members = 8
-};
-
 class gateway;
 
 struct event_listener {
