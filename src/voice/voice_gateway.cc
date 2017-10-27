@@ -1,48 +1,73 @@
-#include <cmd/resource_parser.h>
+#include <boost/bind.hpp>
 #include <boost/process.hpp>
 #include <iostream>
 #include <json.hpp>
 
-#include <sodium/crypto_secretbox.h>
-#include "crypto.h"
-#include "opus_encoder.h"
-#include "voice_gateway.h"
+#include <net/resource_parser.h>
+#include <opcodes.h>
+#include <voice/crypto.h>
+#include <voice/opus_encoder.h>
+#include <voice/voice_gateway.h>
+#include <voice/voice_state_listener.h>
 
-cmd::discord::voice_gateway::voice_gateway(const std::string &url, const std::string &user_id,
-                                           const std::string &session_id,
-                                           const std::string &guild_id, const std::string &token)
-    : websocket{}
-    , url{url}
+cmd::discord::voice_gateway::voice_gateway(boost::asio::io_service &service,
+                                           cmd::discord::voice_gateway_entry &e,
+                                           std::string user_id)
+    : service{service}
+    , websocket{service}
+    , sender{service, websocket, 500}
+    , entry{e}
     , user_id{user_id}
-    , session_id{session_id}
-    , guild_id{guild_id}
-    , token{token}
-    , state{connection_state::disconnected}
     , ssrc{0}
     , udp_port{0}
-    , udp_socket{cmd::inet_family::ipv4}
-
+    , state{connection_state::disconnected}
 {
-    std::cerr << "Connecting to voice gateway='" << url << "' user_id='" << user_id
-              << "' session_id='" << session_id << "' token='" << token << "'\n";
+    std::cerr << "Connecting to voice gateway='" << entry.endpoint << "' user_id='" << user_id
+              << " 'session_id='" << entry.session_id << "' token='" << entry.token << "'\n";
 
     // Make sure we're using voice gateway v3
-    websocket.connect("wss://" + url + "/?v=3");
-    identify();
+    websocket.async_connect(
+        "wss://" + entry.endpoint + "/?v=3",
+        boost::bind(&voice_gateway::on_connect, this, boost::asio::placeholders::error,
+                    boost::asio::placeholders::bytes_transferred));
+}
+
+void cmd::discord::voice_gateway::on_connect(const boost::system::error_code &e, size_t)
+{
+    if (e) {
+    } else {
+        // Sucessfully connected
+        beater = std::make_unique<cmd::discord::heartbeater>(service, *this);
+        identify();
+    }
+}
+
+void cmd::discord::voice_gateway::identify()
+{
+    nlohmann::json identify{{"op", static_cast<int>(gtw_voice_op_send::identify)},
+                            {"d",
+                             {{"server_id", entry.guild_id},
+                              {"user_id", user_id},
+                              {"session_id", entry.session_id},
+                              {"token", entry.token}}}};
+    send(identify.dump(), print_info);
+}
+
+void cmd::discord::voice_gateway::send(const std::string &s,
+                                       cmd::websocket::message_sent_callback c)
+{
+    sender.safe_send(s, c);
 }
 
 void cmd::discord::voice_gateway::next_event()
 {
     // Read the next message from the WebSocket and place it in buffer
-    auto read = websocket.next_message(buffer);
-    if (read == 0) {
-        throw std::runtime_error("WebSocket connection interrupted");
-    }
+
     std::cout << "VOICE GATEWAY: ";
-    std::cout.write((char *) buffer.data(), read);
+    //     std::cout.write((char *) buffer.data(), read);
     std::cout << "\n";
     // Parse the results as a json object
-    auto json = nlohmann::json::parse(buffer.begin(), buffer.end());
+    nlohmann::json json;
 
     auto op = json["op"];
     auto payload_data = json["d"];
@@ -60,7 +85,7 @@ void cmd::discord::voice_gateway::next_event()
                 break;
             case gtw_voice_op_recv::heartbeat_ack:
                 // We should check if the nonce is the same as the one sent by the heartbeater
-                beater.on_heartbeat_ack();
+                beater->on_heartbeat_ack();
                 break;
             case gtw_voice_op_recv::hello:
                 notify_heartbeater_hello(payload_data);
@@ -87,43 +112,18 @@ void cmd::discord::voice_gateway::heartbeat()
 {
     // TODO: save the nonce (rand()) and check if it is ACKed
     nlohmann::json json{{"op", static_cast<int>(gtw_voice_op_send::heartbeat)}, {"d", rand()}};
-    safe_send(json.dump());
-}
-
-void cmd::discord::voice_gateway::safe_send(const std::string &s)
-{
-    std::lock_guard<std::mutex> guard{write_mutex};
-    // Rate limit gateway messages, allow 1 message every 0.5 seconds
-    auto now = clock::now();
-    auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_msg_sent);
-    if (diff.count() < 500) {
-        std::this_thread::sleep_for(diff);
-        last_msg_sent = now + diff;
-    } else {
-        last_msg_sent = now;
-    }
-    websocket.send(s);
-    std::cout << "Voice gateway sent: " << s << "\n";
-}
-
-void cmd::discord::voice_gateway::identify()
-{
-    nlohmann::json identify{{"op", static_cast<int>(gtw_voice_op_send::identify)},
-                            {"d",
-                             {{"server_id", guild_id},
-                              {"user_id", user_id},
-                              {"session_id", session_id},
-                              {"token", token}}}};
-    safe_send(identify.dump());
+    send(json.dump(), print_info);
 }
 
 void cmd::discord::voice_gateway::resume()
 {
     state = connection_state::disconnected;
-    nlohmann::json resumed{
-        {"op", static_cast<int>(gtw_voice_op_send::resume)},
-        {"d", {{"server_id", guild_id}, {"session_id", session_id}, {"token", token}}}};
-    safe_send(resumed.dump());
+    nlohmann::json resumed{{"op", static_cast<int>(gtw_voice_op_send::resume)},
+                           {"d",
+                            {{"server_id", entry.guild_id},
+                             {"session_id", entry.session_id},
+                             {"token", entry.token}}}};
+    send(resumed.dump(), print_info);
 }
 
 void cmd::discord::voice_gateway::extract_ready_info(nlohmann::json &data)
@@ -157,23 +157,16 @@ void cmd::discord::voice_gateway::extract_session_info(nlohmann::json &data)
     if (secret_key.size() != 32)
         throw std::runtime_error("Expected 32 byte secret key but got " +
                                  std::to_string(secret_key.size()));
-
-    audio_thread = std::thread{&voice_gateway::play_audio, this,
-                               "https://www.youtube.com/watch?v=iTuhpJBBvCc"};
 }
 
 void cmd::discord::voice_gateway::ip_discovery()
 {
     std::string host;
     // Parse the url, extracting only the host
-    std::tie(std::ignore, host, std::ignore, std::ignore) = cmd::resource_parser::parse(url);
-    // Connect to the host on the port specified by the Voice Ready Payload
-    cmd::inet_resolver resolver{host.c_str(), udp_port, cmd::inet_proto::udp,
-                                cmd::inet_family::ipv4};
-    voice_addr = resolver.addresses.front();
+    std::tie(std::ignore, host, std::ignore, std::ignore) =
+        cmd::resource_parser::parse(entry.endpoint);
 
-    std::cout << "Voice server located at " << voice_addr.to_string() << ":"
-              << voice_addr.get_port() << "\n";
+    // TODO: Connect to the host on the port specified by the Voice Ready Payload (UDP)
 
     unsigned char buffer[70];
     std::memset(buffer, 0, sizeof(buffer));
@@ -184,18 +177,9 @@ void cmd::discord::voice_gateway::ip_discovery()
     buffer[2] = (ssrc & 0x0000FF00) >> 8;
     buffer[3] = (ssrc & 0x000000FF);
 
-    int retries = 0;
-    ssize_t ret;
-    while (true) {
-        ret = udp_socket.send(voice_addr, buffer, sizeof(buffer));
-        if (ret != 70)
-            throw std::runtime_error("UDP error, could not send datagram");
-        ret = udp_socket.recv(buffer, sizeof(buffer), 0, 1000);
-        if (ret == 70)  // We got our response
-            break;
-        if (retries++ == 4)
-            throw std::runtime_error("IP discovery failed, no response from Discord");
-    }
+    // TODO:
+    // Send buffer over socket, timing out after incase of packet loss
+    // Receive 70 byte payload containing external ip and udp portno
 
     // First 4 bytes of buffer should be SSRC, next is beginning of this udp socket's external IP
     external_ip = std::string((char *) &buffer[4]);
@@ -217,7 +201,7 @@ void cmd::discord::voice_gateway::select(uint16_t local_udp_port)
           {"data",
            {{"address", external_ip}, {"port", local_udp_port}, {"mode", "xsalsa20_poly1305"}}}}}};
 
-    safe_send(select_payload.dump());
+    send(select_payload.dump(), print_info);
 }
 
 void cmd::discord::voice_gateway::notify_heartbeater_hello(nlohmann::json &data)
@@ -228,7 +212,7 @@ void cmd::discord::voice_gateway::notify_heartbeater_hello(nlohmann::json &data)
         int val = data.at("heartbeat_interval").get<int>();
         val = (val / 4) * 3;
         data["heartbeat_interval"] = val;
-        beater.on_hello(*this, data);
+        beater->on_hello(data);
     }
 }
 
@@ -237,14 +221,14 @@ void cmd::discord::voice_gateway::start_speaking()
     // Apparently this _doesnt_ need the ssrc
     nlohmann::json speaking_payload{{"op", static_cast<int>(gtw_voice_op_send::speaking)},
                                     {"d", {{"speaking", true}, {"delay", 0}}}};
-    safe_send(speaking_payload.dump());
+    send(speaking_payload.dump(), print_info);
 }
 
 void cmd::discord::voice_gateway::stop_speaking()
 {
     nlohmann::json speaking_payload{{"op", static_cast<int>(gtw_voice_op_send::speaking)},
                                     {"d", {{"speaking", false}, {"delay", 0}}}};
-    safe_send(speaking_payload.dump());
+    send(speaking_payload.dump(), print_info);
 }
 
 void cmd::discord::voice_gateway::play_audio(const std::string &youtube_url)
@@ -275,8 +259,6 @@ void cmd::discord::voice_gateway::play_audio(const std::string &youtube_url)
         "ffmpeg -i - -ac 2 -f s16le -", boost::process::std_out > audio_read_src,
         boost::process::std_in<audio_transport_pipe, boost::process::std_err> boost::process::null};
 
-    start_speaking();
-    stop_speaking();
     start_speaking();
 
     // 960 samples per channel per datagram we send. At 48000 Hz, this is 20ms
@@ -314,7 +296,7 @@ void cmd::discord::voice_gateway::play_audio(const std::string &youtube_url)
 
         std::cerr << "audio-read=" << read << " ";
 
-        if (read < sizeof(read_buffer)) {
+        if ((size_t) read < sizeof(read_buffer)) {
             // Fill the rest of the buffer with 0
             std::memset(read_buffer + read, 0, sizeof(read_buffer) - read);
         }
@@ -340,6 +322,7 @@ void cmd::discord::voice_gateway::play_audio(const std::string &youtube_url)
         // Wait a while before sending next packet
         std::this_thread::sleep_for(std::chrono::milliseconds(17));
 
+        /*
         auto wrote = udp_socket.send(voice_addr, rtp_buffer,
                                      12 + encoded_len + crypto_secretbox_MACBYTES, 0);
         if (wrote != 12 + encoded_len + crypto_secretbox_MACBYTES) {
@@ -350,6 +333,7 @@ void cmd::discord::voice_gateway::play_audio(const std::string &youtube_url)
         std::cerr << " wrote " << wrote << " " << voice_addr.to_string() << " "
                   << voice_addr.get_port() << "\n";
         std::cerr.flush();
+         */
     }
     stop_speaking();
 
