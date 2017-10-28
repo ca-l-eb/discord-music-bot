@@ -1,5 +1,10 @@
 #include "channel.h"
 
+bool cmd::discord::operator<(const channel &lhs, const channel &rhs)
+{
+    return lhs.id < rhs.id;
+}
+
 void cmd::discord::to_json(nlohmann::json &json, const channel &c)
 {
     json = {{"name", c.name},

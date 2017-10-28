@@ -22,6 +22,7 @@ struct channel {
     int bitrate;
 };
 
+bool operator<(const channel &lhs, const channel &rhs);
 void to_json(nlohmann::json &json, const channel &c);
 void from_json(const nlohmann::json &json, channel &c);
 }

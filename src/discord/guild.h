@@ -13,7 +13,7 @@ namespace discord
 {
 struct guild {
     std::set<member> members;
-    std::vector<channel> channels;
+    std::set<channel> channels;
     std::string owner;
     std::string name;
     std::string id;
@@ -21,6 +21,7 @@ struct guild {
     bool unavailable;
 };
 
+bool operator<(const guild &lhs, const guild &rhs);
 void to_json(nlohmann::json &json, const cmd::discord::guild &g);
 void from_json(const nlohmann::json &json, cmd::discord::guild &g);
 

@@ -1,5 +1,10 @@
 #include "guild.h"
 
+bool cmd::discord::operator<(const cmd::discord::guild &lhs, const cmd::discord::guild &rhs)
+{
+    return lhs.id < rhs.id;
+}
+
 void cmd::discord::to_json(nlohmann::json &json, const cmd::discord::guild &g)
 {
     json = {{"owner", g.owner},
@@ -19,5 +24,5 @@ void cmd::discord::from_json(const nlohmann::json &json, cmd::discord::guild &g)
     g.id = json.at("id").get<std::string>();
     g.region = json.at("region").get<std::string>();
     g.unavailable = json.at("unavailable").get<bool>();
-    g.channels = json.at("channels").get<std::vector<cmd::discord::channel>>();
+    g.channels = json.at("channels").get<std::set<cmd::discord::channel>>();
 }
