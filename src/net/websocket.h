@@ -6,8 +6,8 @@
 #include <string>
 
 #include <net/http_response.h>
-#include <deque>
 #include <cstdint>
+#include <deque>
 
 namespace cmd
 {
@@ -42,7 +42,7 @@ public:
         tls_handshake_error = 1015  // don't send
     };
 
-    enum class  error {
+    enum class error {
         websocket_connection_closed = 1,
         upgrade_failed,
         bad_upgrade_key,
@@ -102,7 +102,7 @@ public:
     }
 
     using message_received_callback =
-    std::function<void(const boost::system::error_code &, const uint8_t *, size_t)>;
+        std::function<void(const boost::system::error_code &, const uint8_t *, size_t)>;
     using message_sent_callback = std::function<void(const boost::system::error_code &, size_t)>;
 
     explicit websocket(boost::asio::io_service &service);
@@ -126,6 +126,7 @@ private:
     boost::asio::streambuf buffer;
     std::string host, resource;
     bool secure_connection;
+    boost::asio::ip::tcp::resolver resolver;
 
     // Messages get submitted to the write_queue, wrapped in the write strand
     boost::asio::strand write_strand;
@@ -171,6 +172,8 @@ private:
 
     using endpoint_iterator = boost::asio::ip::tcp::resolver::iterator;
 
+    void on_resolve(const boost::system::error_code &e, endpoint_iterator it);
+    void on_connect(const boost::system::error_code &e, endpoint_iterator it);
     void on_websocket_upgrade_sent(const boost::system::error_code &e);
     void on_websocket_upgrade_receive(const boost::system::error_code &e, size_t transferred);
     void on_websocket_data_receive(const boost::system::error_code &e, size_t transferred);
