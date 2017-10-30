@@ -50,10 +50,10 @@ void cmd::websocket::async_connect(const std::string &url, cmd::websocket::messa
     std::tie(proto, host, port, resource) = cmd::resource_parser::parse(url);
 
     // Use unsecure connection by default if resource parser couldn't determine a port
-    if (port == -1)
+    if (port == -1 || proto == "ws")
         proto = "http";
 
-    if (port == 443)
+    if (port == 443 || proto == "wss")
         proto = "https";
 
     async_connect(host, proto, resource, c);
@@ -82,9 +82,10 @@ void cmd::websocket::on_connect(const boost::system::error_code &e, endpoint_ite
         }
     } else if (it != endpoint_iterator()) {
         // Try next
+        auto endpoint = *it;
         auto next = ++it;
         socket.lowest_layer().async_connect(
-            *it, [=](const boost::system::error_code &e) { on_connect(e, next); });
+            endpoint, [=](const boost::system::error_code &e) { on_connect(e, next); });
     } else {
         throw std::runtime_error("Could not connect to host: " + host);
     }
