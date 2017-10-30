@@ -2,15 +2,12 @@
 #define CMD_DISCORD_OPUS_ENCODER_H
 
 #include <opus/opus.h>
-#include <cstddef>
 #include <cstdint>
 
 namespace cmd
 {
 namespace discord
 {
-enum class audio_format { F32, S32, S16, S8, U32, U16, U8 };
-
 class opus_encoder
 {
 public:

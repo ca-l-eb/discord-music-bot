@@ -17,24 +17,35 @@ cmd::discord::voice_gateway::voice_gateway(boost::asio::io_service &service,
     , websocket{service}
     , sender{service, websocket, 500}
     , entry{e}
+    , socket{service}
+    , resolver{service}
+    , timer{service}
     , user_id{user_id}
     , ssrc{0}
     , udp_port{0}
+    , buffer(512)
     , state{connection_state::disconnected}
 {
     std::cerr << "Connecting to voice gateway='" << entry.endpoint << "' user_id='" << user_id
               << " 'session_id='" << entry.session_id << "' token='" << entry.token << "'\n";
 
+    socket.open(boost::asio::ip::udp::v4());
     // Make sure we're using voice gateway v3
-    websocket.async_connect(
-        "wss://" + entry.endpoint + "/?v=3",
-        boost::bind(&voice_gateway::on_connect, this, boost::asio::placeholders::error,
-                    boost::asio::placeholders::bytes_transferred));
+    websocket.async_connect("wss://" + entry.endpoint + "/?v=3",
+                            [&](const boost::system::error_code &e, size_t transferred) {
+                                on_connect(e, transferred);
+                            });
+}
+
+cmd::discord::voice_gateway::~voice_gateway()
+{
+    std::cout << "Voice gateway destructor\n";
 }
 
 void cmd::discord::voice_gateway::on_connect(const boost::system::error_code &e, size_t)
 {
     if (e) {
+        std::cerr << "Voice gateway connect error: " << e.message() << "\n";
     } else {
         // Sucessfully connected
         beater = std::make_unique<cmd::discord::heartbeater>(service, *this);
@@ -50,7 +61,12 @@ void cmd::discord::voice_gateway::identify()
                               {"user_id", user_id},
                               {"session_id", entry.session_id},
                               {"token", entry.token}}}};
-    send(identify.dump(), print_info);
+    send(identify.dump(), [&](const boost::system::error_code &e, size_t) {
+        if (e) {
+            throw std::runtime_error("Could not connect to voice gateway: " + e.message());
+        }
+        event_loop();
+    });
 }
 
 void cmd::discord::voice_gateway::send(const std::string &s,
@@ -59,53 +75,68 @@ void cmd::discord::voice_gateway::send(const std::string &s,
     sender.safe_send(s, c);
 }
 
-void cmd::discord::voice_gateway::next_event()
+void cmd::discord::voice_gateway::event_loop()
 {
-    // Read the next message from the WebSocket and place it in buffer
+    websocket.async_next_message(
+        [&](const boost::system::error_code &e, const uint8_t *data, size_t len) {
+            if (e) {
+                std::cerr << "Voice gateway websocket error: " << e.message() << "\n";
+                return;
+            }
+            const char *begin = reinterpret_cast<const char *>(data);
+            const char *end = begin + len;
 
-    std::cout << "VOICE GATEWAY: ";
-    //     std::cout.write((char *) buffer.data(), read);
-    std::cout << "\n";
-    // Parse the results as a json object
-    nlohmann::json json;
+            std::cout << "VOICE GATEWAY: ";
+            std::cout.write(begin, len);
+            std::cout << "\n";
+            // Parse the results as a json object
+            try {
+                nlohmann::json json = nlohmann::json::parse(begin, end);
 
-    auto op = json["op"];
-    auto payload_data = json["d"];
+                auto op = json["op"];
+                auto payload_data = json["d"];
 
-    if (op.is_number()) {
-        auto gateway_op = static_cast<gtw_voice_op_recv>(op.get<int>());
-        switch (gateway_op) {
-            case gtw_voice_op_recv::ready:
-                extract_ready_info(payload_data);
-                break;
-            case gtw_voice_op_recv::session_description:
-                extract_session_info(payload_data);
-                break;
-            case gtw_voice_op_recv::speaking:
-                break;
-            case gtw_voice_op_recv::heartbeat_ack:
-                // We should check if the nonce is the same as the one sent by the heartbeater
-                beater->on_heartbeat_ack();
-                break;
-            case gtw_voice_op_recv::hello:
-                notify_heartbeater_hello(payload_data);
-                break;
-            case gtw_voice_op_recv::resumed:
-                // Successfully resumed
-                state = connection_state::connected;
-                break;
-            case gtw_voice_op_recv::client_disconnect:
-                break;
-        }
-    } else {
-        // Discord reference says the hello opcode 8 doesn't contain an 'op' field, so the above if
-        // statement will fail, but upon testing, it does have the 'op'. So I resorted to checking
-        // both just in case
-        auto interval = json["heartbeat_interval"];
-        if (interval.is_object()) {
-            notify_heartbeater_hello(interval);
-        }
-    }
+                if (op.is_number()) {
+                    auto gateway_op = static_cast<gtw_voice_op_recv>(op.get<int>());
+                    switch (gateway_op) {
+                        case gtw_voice_op_recv::ready:
+                            extract_ready_info(payload_data);
+                            break;
+                        case gtw_voice_op_recv::session_description:
+                            extract_session_info(payload_data);
+                            break;
+                        case gtw_voice_op_recv::speaking:
+                            break;
+                        case gtw_voice_op_recv::heartbeat_ack:
+                            // We should check if the nonce is the same as the one sent by the
+                            // heartbeater
+                            beater->on_heartbeat_ack();
+                            break;
+                        case gtw_voice_op_recv::hello:
+                            notify_heartbeater_hello(payload_data);
+                            break;
+                        case gtw_voice_op_recv::resumed:
+                            // Successfully resumed
+                            state = connection_state::connected;
+                            break;
+                        case gtw_voice_op_recv::client_disconnect:
+                            break;
+                    }
+                } else {
+                    // Discord reference says the hello opcode 8 doesn't contain an 'op' field, so
+                    // the above if statement will fail, but upon testing, it does have the 'op'. So
+                    // I resorted to checking both just in case
+                    auto interval = json["heartbeat_interval"];
+                    if (interval.is_object()) {
+                        notify_heartbeater_hello(interval);
+                    }
+                }
+                // No error, do the loop again
+                event_loop();
+            } catch (std::exception &e) {
+                std::cerr << "Error in voice gateway: " << e.what() << "\n";
+            }
+        });
 }
 
 void cmd::discord::voice_gateway::heartbeat()
@@ -130,7 +161,6 @@ void cmd::discord::voice_gateway::extract_ready_info(nlohmann::json &data)
 {
     auto ssrc = data["ssrc"];
     auto port = data["port"];
-    auto modes = data["modes"];
 
     if (ssrc.is_number())
         this->ssrc = ssrc.get<uint32_t>();
@@ -139,7 +169,29 @@ void cmd::discord::voice_gateway::extract_ready_info(nlohmann::json &data)
 
     state = connection_state::connected;
 
-    ip_discovery();
+    // Prepare buffer for ip discovery
+    std::memset(buffer.data(), 0, 70);
+    buffer[0] = (this->ssrc & 0xFF000000) >> 24;
+    buffer[1] = (this->ssrc & 0x00FF0000) >> 16;
+    buffer[2] = (this->ssrc & 0x0000FF00) >> 8;
+    buffer[3] = (this->ssrc & 0x000000FF);
+
+    std::string host;
+    // Parse the endpoint url, extracting only the host
+    std::tie(std::ignore, host, std::ignore, std::ignore) =
+        cmd::resource_parser::parse(entry.endpoint);
+    boost::asio::ip::udp::resolver::query query{boost::asio::ip::udp::v4(), host,
+                                                std::to_string(udp_port)};
+    resolver.async_resolve(query, [&](const boost::system::error_code &e,
+                                      boost::asio::ip::udp::resolver::iterator iterator) {
+        if (e) {
+            std::cerr << "Could not resolve udp " << host << ": " << e.message() << "\n";
+        } else {
+            timer.cancel();
+            send_endpoint = *iterator;
+            ip_discovery();
+        }
+    });
 }
 
 void cmd::discord::voice_gateway::extract_session_info(nlohmann::json &data)
@@ -161,35 +213,59 @@ void cmd::discord::voice_gateway::extract_session_info(nlohmann::json &data)
 
 void cmd::discord::voice_gateway::ip_discovery()
 {
-    std::string host;
-    // Parse the url, extracting only the host
-    std::tie(std::ignore, host, std::ignore, std::ignore) =
-        cmd::resource_parser::parse(entry.endpoint);
-
-    // TODO: Connect to the host on the port specified by the Voice Ready Payload (UDP)
-
-    unsigned char buffer[70];
-    std::memset(buffer, 0, sizeof(buffer));
-
-    // Write the SSRC
-    buffer[0] = (ssrc & 0xFF000000) >> 24;
-    buffer[1] = (ssrc & 0x00FF0000) >> 16;
-    buffer[2] = (ssrc & 0x0000FF00) >> 8;
-    buffer[3] = (ssrc & 0x000000FF);
-
-    // TODO:
-    // Send buffer over socket, timing out after incase of packet loss
+    // Send buffer over socket, timing out after in case of packet loss
     // Receive 70 byte payload containing external ip and udp portno
+    retries = 5;
+    timer.expires_from_now(boost::posix_time::milliseconds(0));
+    timer.async_wait([&](const boost::system::error_code &e) {
+        if (!e)
+            send_ip_discovery_datagram();
+    });
 
-    // First 4 bytes of buffer should be SSRC, next is beginning of this udp socket's external IP
-    external_ip = std::string((char *) &buffer[4]);
+    socket.async_receive_from(
+        boost::asio::buffer(buffer, buffer.size()), receive_endpoint,
+        [&](const boost::system::error_code &e, size_t transferred) {
+            if (e) {
+                std::cerr << "Error receiving udp datagram: " << e.message() << "\n";
+            } else if (transferred >= 70) {
+                // We got our response, cancel the next send
+                timer.cancel();
 
-    // Extract the port the udp socket is on (little-endian)
-    uint16_t local_udp_port = (buffer[69] << 8) | buffer[68];
+                // First 4 bytes of buffer should be SSRC, next is beginning of this udp socket's
+                // external IP
+                external_ip = std::string((char *) &buffer[4]);
 
-    std::cout << "UDP socket bound at " << external_ip << ":" << local_udp_port << "\n";
+                // Extract the port the udp socket is on (little-endian)
+                uint16_t local_udp_port = (buffer[69] << 8) | buffer[68];
 
-    select(local_udp_port);
+                std::cout << "UDP socket bound at " << external_ip << ":" << local_udp_port << "\n";
+
+                select(local_udp_port);
+            }
+        });
+}
+
+void cmd::discord::voice_gateway::send_ip_discovery_datagram()
+{
+    socket.async_send_to(
+        boost::asio::buffer(buffer.data(), 70), send_endpoint,
+        [&](const boost::system::error_code &e, size_t transferred) {
+            if (e) {
+                std::cerr << "Could not send udp packet to voice server: " << e.message() << "\n";
+            }
+            if (retries == 0) {
+                std::cerr << "No response from Discord IP discover request\n";
+                socket.close();
+                return;
+            }
+            retries--;
+            // Next time expires in 200 ms
+            timer.expires_from_now(boost::posix_time::milliseconds(200));
+            timer.async_wait([&](const boost::system::error_code &e) {
+                if (!e)
+                    send_ip_discovery_datagram();
+            });
+        });
 }
 
 void cmd::discord::voice_gateway::select(uint16_t local_udp_port)

@@ -1,6 +1,7 @@
 #ifndef CMD_DISCORD_CRYPTO_H
 #define CMD_DISCORD_CRYPTO_H
 
+#include <sodium.h>
 #include <cstdint>
 
 namespace cmd
