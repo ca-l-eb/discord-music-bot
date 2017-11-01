@@ -3,11 +3,11 @@
 
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
+#include <cstdint>
+#include <deque>
 #include <string>
 
 #include <net/http_response.h>
-#include <cstdint>
-#include <deque>
 
 namespace cmd
 {
@@ -50,7 +50,7 @@ public:
         server_masked_data,
     };
 
-    class websocket_category : public std::error_category, public boost::system::error_category
+    class websocket_category : public boost::system::error_category
     {
     public:
         virtual const char *name() const noexcept
@@ -73,17 +73,11 @@ public:
             }
             return "Unknown WebSocket error";
         }
-        virtual bool equivalent(const std::error_code &code, int condition) const noexcept
+        virtual bool equivalent(const boost::system::error_code &code, int condition) const noexcept
         {
             return &code.category() == this && static_cast<int>(code.value()) == condition;
         }
     };
-
-    static const std::error_category &websocket_error_category()
-    {
-        static websocket::websocket_category instance;
-        return instance;
-    }
 
     static const boost::system::error_category &boost_websocket_error_category()
     {
@@ -91,12 +85,7 @@ public:
         return instance;
     }
 
-    static std::error_code make_error_code(websocket::error code) noexcept
-    {
-        return std::error_code{(int) code, websocket_error_category()};
-    }
-
-    static boost::system::error_code boost_make_error_code(websocket::error code) noexcept
+    static boost::system::error_code make_error_code(websocket::error code) noexcept
     {
         return boost::system::error_code{(int) code, boost_websocket_error_category()};
     }

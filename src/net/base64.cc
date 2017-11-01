@@ -1,8 +1,4 @@
-//
-// Created by dechant on 10/21/17.
-//
-
-#include "base64.h"
+#include <net/base64.h>
 #include <cmath>
 
 static const unsigned char b64_table[] =

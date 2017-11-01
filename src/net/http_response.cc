@@ -3,8 +3,8 @@
 #include <boost/bind.hpp>
 #include <regex>
 
-#include "http_response.h"
-#include "string_utils.h"
+#include <net/http_response.h>
+#include <string_utils.h>
 
 http_response::http_response()
     : status{0}

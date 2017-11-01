@@ -1,6 +1,6 @@
 #include <regex>
 
-#include "resource_parser.h"
+#include <net/resource_parser.h>
 
 std::tuple<std::string, std::string, int, std::string> cmd::resource_parser::parse(
     const std::string &url)
@@ -15,7 +15,7 @@ std::tuple<std::string, std::string, int, std::string> cmd::resource_parser::par
     std::string resource;
     int port = -1;
     if (matcher.empty())
-        throw std::runtime_error("Invalid url: " + url);
+        return {"", "", -1, ""};
 
     proto = matcher.str(1);
     host = matcher.str(2);

@@ -1,11 +1,7 @@
-//
-// Created by dechant on 10/21/17.
-//
-
 #include <boost/bind.hpp>
 #include <iostream>
 
-#include "http_request.h"
+#include <net/http_request.h>
 
 http_request::http_request(boost::asio::io_service &io, const std::string &host, int port,
                            const std::string &resource)

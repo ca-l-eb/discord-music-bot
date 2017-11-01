@@ -5,9 +5,9 @@
 #include <iostream>
 #include <random>
 
-#include "base64.h"
-#include "resource_parser.h"
-#include "websocket.h"
+#include <net/base64.h>
+#include <net/resource_parser.h>
+#include <net/websocket.h>
 
 using random_byte_engine =
     std::independent_bits_engine<std::default_random_engine, CHAR_BIT, unsigned char>;
@@ -18,9 +18,9 @@ cmd::websocket::websocket(boost::asio::io_service &service)
     : io{service}
     , ctx{boost::asio::ssl::context::tls_client}
     , socket{service, ctx}
+    , resolver{service}
     , write_strand{service}
     , close_status{0}
-    , resolver{service}
 {
 }
 
@@ -48,6 +48,8 @@ void cmd::websocket::async_connect(const std::string &url, cmd::websocket::messa
     std::string proto;
     int port;
     std::tie(proto, host, port, resource) = cmd::resource_parser::parse(url);
+    if (host.empty())
+        throw std::runtime_error("Could not find host url: " + url);
 
     // Use unsecure connection by default if resource parser couldn't determine a port
     if (port == -1 || proto == "ws")
@@ -189,7 +191,7 @@ void cmd::websocket::check_websocket_upgrade()
     if (response.status_code() != 101) {
         // No version renegotiation. We only support WebSocket v13
         io.post([=]() {
-            connect_callback(websocket::boost_make_error_code(websocket::error::upgrade_failed), 0);
+            connect_callback(websocket::make_error_code(websocket::error::upgrade_failed), 0);
         });
         return;
     }
@@ -198,13 +200,13 @@ void cmd::websocket::check_websocket_upgrade()
     auto it = headers_map.find("sec-websocket-accept");
     if (it == headers_map.end()) {
         io.post([=]() {
-            connect_callback(websocket::boost_make_error_code(websocket::error::no_upgrade_key), 0);
+            connect_callback(websocket::make_error_code(websocket::error::no_upgrade_key), 0);
         });
         return;
     }
     if (it->second != expected_accept) {
         io.post([=]() {
-            connect_callback(websocket::boost_make_error_code(websocket::error::bad_upgrade_key),
+            connect_callback(websocket::make_error_code(websocket::error::bad_upgrade_key),
                              0);
         });
     } else {
@@ -324,7 +326,7 @@ void cmd::websocket::async_next_message(message_received_callback c)
 {
     // If the connection has been closed, notify the caller immediately
     if (close_status) {
-        c(websocket::boost_make_error_code(websocket::error::websocket_connection_closed), nullptr,
+        c(websocket::make_error_code(websocket::error::websocket_connection_closed), nullptr,
           0);
     }
     // Otherwise continue on, trying to parse any available buffered data, and enqueueing reads as

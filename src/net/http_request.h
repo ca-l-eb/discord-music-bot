@@ -1,13 +1,9 @@
-//
-// Created by dechant on 10/21/17.
-//
-
 #ifndef ASIO_HTTP_REQUEST_H
 #define ASIO_HTTP_REQUEST_H
 
 #include <boost/asio.hpp>
 #include <string>
-#include "http_response.h"
+#include <net/http_response.h>
 
 class http_request
 {

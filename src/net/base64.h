@@ -1,7 +1,3 @@
-//
-// Created by dechant on 10/21/17.
-//
-
 #ifndef ASIO_BASE64_H
 #define ASIO_BASE64_H
 
