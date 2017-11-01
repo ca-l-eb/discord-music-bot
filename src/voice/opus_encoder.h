@@ -1,8 +1,9 @@
 #ifndef CMD_DISCORD_OPUS_ENCODER_H
 #define CMD_DISCORD_OPUS_ENCODER_H
 
-#include <opus/opus.h>
 #include <cstdint>
+
+#include <opus/opus.h>
 
 namespace cmd
 {

@@ -1,16 +1,26 @@
 #ifndef CMD_DISCORD_VOICE_STATE_LISTENER_H
 #define CMD_DISCORD_VOICE_STATE_LISTENER_H
 
+#include <boost/asio.hpp>
+#include <boost/process.hpp>
+#include <deque>
+#include <memory>
+
 #include <events/event_listener.h>
 #include <gateway.h>
-#include <boost/asio.hpp>
-#include <memory>
 
 namespace cmd
 {
 namespace discord
 {
 class voice_gateway;
+
+struct music_process {
+    boost::process::child youtube_dl;
+    boost::process::child ffmpeg;
+    boost::process::pipe audio_transport;
+    boost::process::pipe pcm_source;
+};
 
 struct voice_gateway_entry {
     std::string channel_id;
@@ -19,6 +29,9 @@ struct voice_gateway_entry {
     std::string token;
     std::string endpoint;
     std::unique_ptr<cmd::discord::voice_gateway> gateway;
+    enum class gateway_state { disconnected, connected, playing, paused } state;
+    std::deque<std::string> music_queue;
+    std::unique_ptr<music_process> process;
 };
 
 class voice_state_listener : public event_listener
@@ -49,6 +62,8 @@ private:
     void do_list(const nlohmann::json &json);
     void do_add(const std::string &params, const nlohmann::json &json);
     void do_skip(const nlohmann::json &json);
+    void do_play(const nlohmann::json &json);
+    void do_pause(const nlohmann::json &json);
 };
 }
 }

@@ -1,6 +1,7 @@
 #include <string_utils.h>
 #include <regex>
 
+#include <net/resource_parser.h>
 #include <voice/voice_state_listener.h>
 
 cmd::discord::voice_state_listener::voice_state_listener(boost::asio::io_service &service,
@@ -77,6 +78,14 @@ void cmd::discord::voice_state_listener::voice_server_update(const nlohmann::jso
 
     // We got all the information needed to join a voice gateway now
     vg.gateway = std::make_unique<cmd::discord::voice_gateway>(service, vg, gateway.get_user_id());
+    vg.gateway->connect([&](const boost::system::error_code &e) {
+        if (e) {
+            std::cerr << "Voice gateway connection error: " << e.message() << "\n";
+        } else {
+            std::cout << "Connected to voice gateway. Ready to send audio\n";
+            vg.state = voice_gateway_entry::gateway_state::connected;
+        }
+    });
 }
 
 void cmd::discord::voice_state_listener::message_create(const nlohmann::json &data)
@@ -125,6 +134,10 @@ void cmd::discord::voice_state_listener::check_command(const std::string &conten
         do_add(params, json);
     else if (command == "skip" || command == "next")
         do_skip(json);
+    else if (command == "play")
+        do_play(json);
+    else if (command == "pause")
+        do_pause(json);
 }
 
 void cmd::discord::voice_state_listener::do_join(const std::string &params,
@@ -136,18 +149,25 @@ void cmd::discord::voice_state_listener::do_join(const std::string &params,
     if (guild_id.empty())
         return;  // We couldn't find the guild for this channel
 
-    // Look through the guild's channels for channel <params>, if it exists, join, else fail
-    // silently
     auto guild = store.get_guild(guild_id);
     if (guild.id != guild_id)
         return;
 
+    auto it = voice_gateways.find(guild_id);
+    if (it == voice_gateways.end())
+        return;
+
+    // Look through the guild's channels for channel <params>, if it exists, join, else fail
+    // silently
     for (auto &channel : guild.channels) {
         if (channel.type == cmd::discord::channel::channel_type::guild_voice &&
             channel.name == params) {
-            // Found a matching voice channel name! Join it
-            join_voice_server(guild.id, channel.id.c_str());
-            return;
+            // Found a matching voice channel name! Join it if it is different than the currently
+            // connected channel (if any)
+            if (it->second.channel_id != channel.id) {
+                join_voice_server(guild.id, channel.id.c_str());
+                return;
+            }
         }
     }
 }
@@ -165,19 +185,57 @@ void cmd::discord::voice_state_listener::do_leave(const nlohmann::json &json)
     if (it == voice_gateways.end())
         return;
 
-    if (it->second.gateway) {
-        it->second.gateway = nullptr;
+    if (it->second.state != voice_gateway_entry::gateway_state::disconnected) {
+        // it->second.gateway = nullptr;
+        it->second.state = voice_gateway_entry::gateway_state::disconnected;
+        it->second.music_queue.clear();
         leave_voice_server(guild_id);
     }
 }
 
-void cmd::discord::voice_state_listener::do_list(const nlohmann::json &json) {}
-void cmd::discord::voice_state_listener::do_add(const std::string &params,
-                                                const nlohmann::json &json)
+void cmd::discord::voice_state_listener::do_list(const nlohmann::json &json)
 {
 }
 
+void cmd::discord::voice_state_listener::do_add(const std::string &params,
+                                                const nlohmann::json &json)
+{
+    auto channel = json["channel_id"];
+    std::string guild_id = store.lookup_channel(channel.get<std::string>());
+    if (guild_id.empty())
+        return;
+
+    auto it = voice_gateways.find(guild_id);
+    if (it == voice_gateways.end())
+        return;
+
+    it->second.music_queue.push_back(params);
+    if (it->second.state == voice_gateway_entry::gateway_state::connected) {
+        do_play(json);
+    }
+}
+
 void cmd::discord::voice_state_listener::do_skip(const nlohmann::json &json) {}
+
+void cmd::discord::voice_state_listener::do_play(const nlohmann::json &json)
+{
+    auto channel = json["channel_id"];
+    std::string guild_id = store.lookup_channel(channel.get<std::string>());
+    if (guild_id.empty())
+        return;
+
+    auto it = voice_gateways.find(guild_id);
+    if (it == voice_gateways.end())
+        return;
+
+    if (!it->second.process)
+        it->second.process = std::make_unique<cmd::discord::music_process>();
+
+    if (!it->second.music_queue.empty()) {
+    }
+}
+
+void cmd::discord::voice_state_listener::do_pause(const nlohmann::json &json) {}
 
 // Join and leave can't be refactored because the nlohmann::json converts char*s
 // into strings before serializing the json, I guess. Doesn't like using nullptrs with char*
@@ -190,7 +248,13 @@ void cmd::discord::voice_state_listener::join_voice_server(const std::string &gu
                           {"channel_id", channel_id},
                           {"self_mute", false},
                           {"self_deaf", false}}}};
-    gateway.send(json.dump(), [](const boost::system::error_code &, size_t) {});
+    gateway.send(json.dump(), [](const boost::system::error_code &e, size_t transferred) {
+        if (e) {
+            std::cerr << "voice state listener send error: " << e.message() << "\n";
+        } else {
+                std::cout << "voice state listener sent " << transferred << " bytes\n";
+        }
+    });
 }
 
 void cmd::discord::voice_state_listener::leave_voice_server(const std::string &guild_id)
@@ -201,5 +265,11 @@ void cmd::discord::voice_state_listener::leave_voice_server(const std::string &g
                           {"channel_id", nullptr},
                           {"self_mute", false},
                           {"self_deaf", false}}}};
-    gateway.send(json.dump(), [](const boost::system::error_code &, size_t) {});
+     gateway.send(json.dump(), [](const boost::system::error_code &e, size_t transferred) {
+        if (e) {
+            std::cerr << "voice state listener send error: " << e.message() << "\n";
+        } else {
+            std::cout << "voice state listener sent " << transferred << " bytes\n";
+        }
+    });
 }

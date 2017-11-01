@@ -24,17 +24,15 @@ cmd::discord::voice_gateway::voice_gateway(boost::asio::io_service &service,
     , ssrc{0}
     , udp_port{0}
     , buffer(512)
+    , encoder{2, 48000}
+    , timestamp{(uint32_t) rand()}
+    , seq_num{(uint16_t) rand()}
     , state{connection_state::disconnected}
 {
     std::cerr << "Connecting to voice gateway='" << entry.endpoint << "' user_id='" << user_id
               << " 'session_id='" << entry.session_id << "' token='" << entry.token << "'\n";
 
     socket.open(boost::asio::ip::udp::v4());
-    // Make sure we're using voice gateway v3
-    websocket.async_connect("wss://" + entry.endpoint + "/?v=3",
-                            [&](const boost::system::error_code &e, size_t transferred) {
-                                on_connect(e, transferred);
-                            });
 }
 
 cmd::discord::voice_gateway::~voice_gateway()
@@ -42,10 +40,24 @@ cmd::discord::voice_gateway::~voice_gateway()
     std::cout << "Voice gateway destructor\n";
 }
 
+void cmd::discord::voice_gateway::connect(connect_callback c)
+{
+    callback = c;
+    // Make sure we're using voice gateway v3
+    websocket.async_connect("wss://" + entry.endpoint + "/?v=3",
+                            [&](const boost::system::error_code &e, size_t transferred) {
+                                if (e) {
+                                    service.post([&]() { callback(e); });
+                                } else {
+                                    on_connect(e, transferred);
+                                }
+                            });
+}
+
 void cmd::discord::voice_gateway::on_connect(const boost::system::error_code &e, size_t)
 {
     if (e) {
-        std::cerr << "Voice gateway connect error: " << e.message() << "\n";
+        service.post([&](){callback(e); }); 
     } else {
         // Sucessfully connected
         beater = std::make_unique<cmd::discord::heartbeater>(service, *this);
@@ -63,9 +75,10 @@ void cmd::discord::voice_gateway::identify()
                               {"token", entry.token}}}};
     send(identify.dump(), [&](const boost::system::error_code &e, size_t) {
         if (e) {
-            throw std::runtime_error("Could not connect to voice gateway: " + e.message());
+            service.post([&](){callback(e); }); 
+        } else {
+            event_loop();
         }
-        event_loop();
     });
 }
 
@@ -77,66 +90,74 @@ void cmd::discord::voice_gateway::send(const std::string &s,
 
 void cmd::discord::voice_gateway::event_loop()
 {
-    websocket.async_next_message(
-        [&](const boost::system::error_code &e, const uint8_t *data, size_t len) {
-            if (e) {
-                std::cerr << "Voice gateway websocket error: " << e.message() << "\n";
-                return;
+    websocket.async_next_message([&](const boost::system::error_code &e, const uint8_t *data,
+                                     size_t len) {
+        if (e) {
+            if (e == cmd::websocket::make_error_code(
+                         cmd::websocket::error::websocket_connection_closed)) {
+                auto code = websocket.close_code();
+                service.post([&]() {
+                    callback(make_error_code(static_cast<voice_gateway::error>(code)));
+                });
+            } else {
+                service.post([&]() { callback(e); });
             }
-            const char *begin = reinterpret_cast<const char *>(data);
-            const char *end = begin + len;
+        }
+        const char *begin = reinterpret_cast<const char *>(data);
+        const char *end = begin + len;
 
-            std::cout << "VOICE GATEWAY: ";
-            std::cout.write(begin, len);
-            std::cout << "\n";
-            // Parse the results as a json object
-            try {
-                nlohmann::json json = nlohmann::json::parse(begin, end);
+        std::cout << "VOICE GATEWAY: ";
+        std::cout.write(begin, len);
+        std::cout << "\n";
+        // Parse the results as a json object
+        try {
+            nlohmann::json json = nlohmann::json::parse(begin, end);
 
-                auto op = json["op"];
-                auto payload_data = json["d"];
+            auto op = json["op"];
+            auto payload_data = json["d"];
 
-                if (op.is_number()) {
-                    auto gateway_op = static_cast<gtw_voice_op_recv>(op.get<int>());
-                    switch (gateway_op) {
-                        case gtw_voice_op_recv::ready:
-                            extract_ready_info(payload_data);
-                            break;
-                        case gtw_voice_op_recv::session_description:
-                            extract_session_info(payload_data);
-                            break;
-                        case gtw_voice_op_recv::speaking:
-                            break;
-                        case gtw_voice_op_recv::heartbeat_ack:
-                            // We should check if the nonce is the same as the one sent by the
-                            // heartbeater
-                            beater->on_heartbeat_ack();
-                            break;
-                        case gtw_voice_op_recv::hello:
-                            notify_heartbeater_hello(payload_data);
-                            break;
-                        case gtw_voice_op_recv::resumed:
-                            // Successfully resumed
-                            state = connection_state::connected;
-                            break;
-                        case gtw_voice_op_recv::client_disconnect:
-                            break;
-                    }
-                } else {
-                    // Discord reference says the hello opcode 8 doesn't contain an 'op' field, so
-                    // the above if statement will fail, but upon testing, it does have the 'op'. So
-                    // I resorted to checking both just in case
-                    auto interval = json["heartbeat_interval"];
-                    if (interval.is_object()) {
-                        notify_heartbeater_hello(interval);
-                    }
+            if (op.is_number()) {
+                auto gateway_op = static_cast<gtw_voice_op_recv>(op.get<int>());
+                switch (gateway_op) {
+                    case gtw_voice_op_recv::ready:
+                        extract_ready_info(payload_data);
+                        break;
+                    case gtw_voice_op_recv::session_description:
+                        extract_session_info(payload_data);
+                        break;
+                    case gtw_voice_op_recv::speaking:
+                        break;
+                    case gtw_voice_op_recv::heartbeat_ack:
+                        // We should check if the nonce is the same as the one sent by the
+                        // heartbeater
+                        beater->on_heartbeat_ack();
+                        break;
+                    case gtw_voice_op_recv::hello:
+                        notify_heartbeater_hello(payload_data);
+                        break;
+                    case gtw_voice_op_recv::resumed:
+                        // Successfully resumed
+                        state = connection_state::connected;
+                        break;
+                    case gtw_voice_op_recv::client_disconnect:
+                        break;
                 }
-                // No error, do the loop again
-                event_loop();
+            } else {
+                // Discord reference says the hello opcode 8 doesn't contain an 'op' field, so
+                // the above if statement will fail, but upon testing, it does have the 'op'. So
+                // I resorted to checking both just in case
+                auto interval = json["heartbeat_interval"];
+                if (interval.is_object()) {
+                    notify_heartbeater_hello(interval);
+                }
+            }
+            // No error, do the loop again
+            event_loop();
             } catch (std::exception &e) {
                 std::cerr << "Error in voice gateway: " << e.what() << "\n";
             }
-        });
+        }
+    );
 }
 
 void cmd::discord::voice_gateway::heartbeat()
@@ -185,7 +206,7 @@ void cmd::discord::voice_gateway::extract_ready_info(nlohmann::json &data)
     resolver.async_resolve(query, [&](const boost::system::error_code &e,
                                       boost::asio::ip::udp::resolver::iterator iterator) {
         if (e) {
-            std::cerr << "Could not resolve udp " << host << ": " << e.message() << "\n";
+            service.post([&]() { callback(e); });
         } else {
             timer.cancel();
             send_endpoint = *iterator;
@@ -209,6 +230,9 @@ void cmd::discord::voice_gateway::extract_session_info(nlohmann::json &data)
     if (secret_key.size() != 32)
         throw std::runtime_error("Expected 32 byte secret key but got " +
                                  std::to_string(secret_key.size()));
+
+    // We are ready to start speaking!
+    service.post([&]() { callback({}); });
 }
 
 void cmd::discord::voice_gateway::ip_discovery()
@@ -226,7 +250,7 @@ void cmd::discord::voice_gateway::ip_discovery()
         boost::asio::buffer(buffer, buffer.size()), receive_endpoint,
         [&](const boost::system::error_code &e, size_t transferred) {
             if (e) {
-                std::cerr << "Error receiving udp datagram: " << e.message() << "\n";
+                service.post([&]() { callback(e); });
             } else if (transferred >= 70) {
                 // We got our response, cancel the next send
                 timer.cancel();
@@ -254,7 +278,9 @@ void cmd::discord::voice_gateway::send_ip_discovery_datagram()
                 std::cerr << "Could not send udp packet to voice server: " << e.message() << "\n";
             }
             if (retries == 0) {
-                std::cerr << "No response from Discord IP discover request\n";
+                service.post([&]() {
+                    callback(make_error_code(error::ip_discovery_failed));
+                });
                 socket.close();
                 return;
             }
@@ -307,116 +333,36 @@ void cmd::discord::voice_gateway::stop_speaking()
     send(speaking_payload.dump(), print_info);
 }
 
-void cmd::discord::voice_gateway::play_audio(const std::string &youtube_url)
+void cmd::discord::voice_gateway::play(const int16_t *pcm, size_t frame_size)
 {
-    //    cmd::inet_addr other;
-    //    unsigned char buffer[512];
-    //    while (true) {
-    //        auto read = udp_socket.recv(other, buffer, sizeof(buffer), 0, 5000);
-    //        std::cout << "Read " << read << " bytes\n";
-    //        if (read == 0)
-    //            return;
-    //        auto flags = std::cerr.flags();
-    //        for (int i = 0; i < read; i++) {
-    //            std::cerr << std::setw(3) << std::hex << (int) buffer[i];
-    //        }
-    //        std::cerr.flags(flags);
-    //        std::cerr << "\n";
-    //    }
-    std::cerr << "Using " << youtube_url << "\n";
-    boost::process::pipe audio_transport_pipe;
-    boost::process::pipe audio_read_src;
-
-    boost::process::child youtube_dl{"youtube-dl -f 251 -o - " + youtube_url,
-                                     boost::process::std_out > audio_transport_pipe,
-                                     boost::process::std_err > boost::process::null};
-
-    boost::process::child ffmpeg{
-        "ffmpeg -i - -ac 2 -f s16le -", boost::process::std_out > audio_read_src,
-        boost::process::std_in<audio_transport_pipe, boost::process::std_err> boost::process::null};
-
     start_speaking();
 
-    // 960 samples per channel per datagram we send. At 48000 Hz, this is 20ms
-    const int frame_size = 960;
-    const int channels = 2;
-    opus_encoder encoder{channels, 48000};
-
-    uint8_t rtp_buffer[512];
+    uint8_t *buf = buffer.data();
     uint8_t opus_encoded_buffer[512];
-    int16_t read_buffer[frame_size * channels];
-    auto write_audio = &rtp_buffer[12];
-
-    uint32_t timestamp = (uint32_t) rand();
-    uint16_t seq_num = (uint16_t) rand();
+    auto write_audio = &buf[12];
     uint8_t nonce[24];
+
     // Set the lower 12 bytes of nonce to 0
     std::memset(&nonce[12], 0, 12);
 
-    std::chrono::system_clock::time_point prev;
-    while (true) {
-        std::cerr << "[" << timestamp << "] ";
-        std::cerr << "[" << seq_num << "] ";
-        write_header(rtp_buffer, seq_num, timestamp);
-        seq_num++;
-        timestamp += frame_size;
+    write_header(buf, seq_num, timestamp);
+    seq_num++;
+    timestamp += frame_size;
 
-        // Copy the RTP header to first 12 bytes of nonce
-        std::memcpy(nonce, rtp_buffer, 12);
+    // Copy the RTP header to first 12 bytes of nonce
+    std::memcpy(nonce, buf, 12);
+    int encoded_len = encoder.encode(pcm, frame_size, opus_encoded_buffer, sizeof(opus_encoded_buffer));
 
-        auto read = audio_read_src.read((char *) read_buffer, sizeof(read_buffer));
-        if (read == 0 || read == -1) {
-            std::cerr << "\nAUDIO STREAM COMPLETE\n";
-            break;  // Stream is done
-        }
-
-        std::cerr << "audio-read=" << read << " ";
-
-        if ((size_t) read < sizeof(read_buffer)) {
-            // Fill the rest of the buffer with 0
-            std::memset(read_buffer + read, 0, sizeof(read_buffer) - read);
-        }
-
-        int encoded_len = encoder.encode(read_buffer, frame_size, opus_encoded_buffer,
-                                         sizeof(opus_encoded_buffer));
-        std::cerr << "encoded-len=" << encoded_len << " ";
-
-        std::cerr << "[";
-        auto flags = std::cerr.flags();
-        for (int i = 0; i < 12; i++)
-            std::cerr << std::setw(3) << std::hex << (int) rtp_buffer[i];
-        std::cerr.flags(flags);
-        std::cerr << " ]";
-
-        auto error = cmd::discord::crypto::xsalsa20_poly1305_encrypt(
+    auto error = cmd::discord::crypto::xsalsa20_poly1305_encrypt(
             opus_encoded_buffer, write_audio, encoded_len, secret_key.data(), nonce);
 
-        if (error) {
-            std::cerr << " ENCRYPT FAILED ";
-        }
+    if (error)
+        return;  // There was a problem encrypting the data
 
-        // Wait a while before sending next packet
-        std::this_thread::sleep_for(std::chrono::milliseconds(17));
+    // Make sure we also count the RTP header and the MAC from encrypting
+    encoded_len += 12 + crypto_secretbox_MACBYTES;
 
-        /*
-        auto wrote = udp_socket.send(voice_addr, rtp_buffer,
-                                     12 + encoded_len + crypto_secretbox_MACBYTES, 0);
-        if (wrote != 12 + encoded_len + crypto_secretbox_MACBYTES) {
-            std::cerr << "\nCould not send entire RTP frame. Sent " << wrote << " out of "
-                      << (12 + encoded_len) << " bytes\n";
-            break;
-        }
-        std::cerr << " wrote " << wrote << " " << voice_addr.to_string() << " "
-                  << voice_addr.get_port() << "\n";
-        std::cerr.flush();
-         */
-    }
-    stop_speaking();
-
-    if (youtube_dl.joinable())
-        youtube_dl.join();
-    if (ffmpeg.joinable())
-        ffmpeg.join();
+    socket.async_send_to(boost::asio::buffer(buf, encoded_len), send_endpoint, print_info);
 }
 
 void cmd::discord::voice_gateway::write_header(unsigned char *buffer, uint16_t seq_num,
