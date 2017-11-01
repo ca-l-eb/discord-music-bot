@@ -1,9 +1,9 @@
-#include <voice/voice_state_listener.h>
 #include <boost/bind.hpp>
 #include <iostream>
 #include <memory>
 
 #include <gateway.h>
+#include <voice/voice_state_listener.h>
 
 cmd::discord::gateway::gateway(boost::asio::io_service &service, const std::string &token)
     : service{service}
@@ -12,47 +12,22 @@ cmd::discord::gateway::gateway(boost::asio::io_service &service, const std::stri
     , token{token}
     , state{connection_state::disconnected}
 {
-    gateway_event_map.emplace("READY", [&](nlohmann::json &data) -> void {
-        auto version = data["v"];
-        if (version.is_number()) {
-            if (version.get<int>() != 6)
-                throw std::runtime_error(
-                    "Unsupported gateway protocol version: " + std::to_string(version.get<int>()) +
-                    ". Support is limited to v6");
-        } else {
-            throw std::runtime_error("Expected version number in READY event");
-        }
-
-        // We got the READY event, we are now connected
-        state = connection_state::connected;
-
-        auto user_obj = data["user"];
-        if (user_obj.is_object()) {
-            auto id = user_obj["id"];
-            if (id.is_string()) {
-                user_id = id.get<std::string>();
-            }
-        }
-        auto session = data["session_id"];
-        if (session.is_string())
-            session_id = session.get<std::string>();
-    });
-    gateway_event_map.emplace("GUILD_CREATE",
-                              [&](nlohmann::json &data) -> void { guilds.push_back(data); });
-    gateway_event_map.emplace(
-        "RESUME", [&](nlohmann::json &) -> void { state = connection_state::connected; });
+    gateway_event_map.emplace("READY", [&](nlohmann::json &data) { on_ready(data); });
+    gateway_event_map.emplace("GUILD_CREATE", [&](nlohmann::json &data) { store.parse_guild(data); });
+    gateway_event_map.emplace("RESUME",
+                              [&](nlohmann::json &) { state = connection_state::connected; });
 
     // Add listener for voice events
-    auto handler = std::make_shared<voice_state_listener>(service, *this);
+    auto handler = std::make_shared<voice_state_listener>(service, *this, store);
     add_listener("VOICE_STATE_UPDATE", "voice_gateway_listener", handler);
     add_listener("VOICE_SERVER_UPDATE", "voice_gateway_listener", handler);
     add_listener("MESSAGE_CREATE", "voice_gateway_listener", handler);
 
     // Establish the WebSocket connection
-    websocket.async_connect(
-        "wss://gateway.discord.gg/?v=6&encoding=json",
-        boost::bind(&gateway::on_connect, this, boost::asio::placeholders::error,
-                    boost::asio::placeholders::bytes_transferred));
+    websocket.async_connect("wss://gateway.discord.gg/?v=6&encoding=json",
+                            [&](const boost::system::error_code &e, size_t transferred) {
+                                on_connect(e, transferred);
+                            });
 }
 
 cmd::discord::gateway::~gateway() {}
@@ -130,12 +105,12 @@ void cmd::discord::gateway::resume()
     send(resume_payload.dump(), print_info_send);
 }
 
-std::string cmd::discord::gateway::get_user_id()
+const std::string &cmd::discord::gateway::get_user_id() const
 {
     return user_id;
 }
 
-std::string cmd::discord::gateway::get_session_id()
+const std::string &cmd::discord::gateway::get_session_id() const
 {
     return session_id;
 }
@@ -175,6 +150,33 @@ void cmd::discord::gateway::on_connect(const boost::system::error_code &e, size_
     identify();
 }
 
+void cmd::discord::gateway::on_ready(nlohmann::json &data)
+{
+    auto version = data["v"];
+    if (version.is_number()) {
+        if (version.get<int>() != 6)
+            throw std::runtime_error(
+                "Unsupported gateway protocol version: " + std::to_string(version.get<int>()) +
+                ". Support is limited to v6");
+    } else {
+        throw std::runtime_error("Expected version number in READY event");
+    }
+
+    // We got the READY event, we are now connected
+    state = connection_state::connected;
+
+    auto user_obj = data["user"];
+    if (user_obj.is_object()) {
+        auto id = user_obj["id"];
+        if (id.is_string()) {
+            user_id = id.get<std::string>();
+        }
+    }
+    auto session = data["session_id"];
+    if (session.is_string())
+        session_id = session.get<std::string>();
+}
+
 void cmd::discord::gateway::event_loop()
 {
     // Asynchronously read next message, on message received send it to listeners
@@ -183,8 +185,9 @@ void cmd::discord::gateway::event_loop()
         if (e) {
             if (e == cmd::websocket::make_error_code(
                          cmd::websocket::error::websocket_connection_closed)) {
-                std::cerr << "WebSocket connection closed with code: " << websocket.close_code()
-                          << "\n";
+                // Convert the close code to a gateway error message
+                auto ec = gateway::make_error_code(static_cast<gateway::error>(websocket.close_code()));
+                throw std::runtime_error(ec.message());
             }
             throw std::runtime_error("There was an error: " + e.message());
         }
@@ -207,6 +210,10 @@ void cmd::discord::gateway::event_loop()
                 }
                 std::string event_name = json["t"].is_string() ? json["t"].get<std::string>() : "";
 
+                if (event_name == "MESSAGE_CREATE") {
+                    // TODO: Ignore messages that are sent by this bot (user_id)
+                }
+
                 auto gateway_op = static_cast<gtw_op_recv>(op_val);
                 switch (gateway_op) {
                     case gtw_op_recv::dispatch:
@@ -226,11 +233,12 @@ void cmd::discord::gateway::event_loop()
                             throw std::runtime_error("Could not connect to Discord Gateway");
                         } else {
                             state = connection_state::disconnected;
-                            // Already connected, if we can reconnect, try to resume the connection
+                            // Already connected, if we can reconnect, try to resume the
+                            // connection
                             if (event_data.is_boolean() && event_data.get<bool>())
                                 resume();
                             else
-                                throw std::runtime_error("");
+                                throw std::runtime_error("disconnected");
                         }
                         break;
                     case gtw_op_recv::hello:

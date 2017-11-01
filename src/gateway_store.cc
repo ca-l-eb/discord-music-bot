@@ -1,4 +1,4 @@
-#include "gateway_store.h"
+#include <gateway_store.h>
 
 void cmd::discord::gateway_store::parse_guild(const nlohmann::json &json) {
     try {

@@ -1,11 +1,12 @@
 #ifndef GATEWAY_STORE_H
 #define GATEWAY_STORE_H
 
-#include <discord/guild.h>
 #include <json.hpp>
 #include <map>
 #include <set>
 #include <string>
+
+#include <discord/guild.h>
 
 namespace cmd
 {
