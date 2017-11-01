@@ -1,4 +1,4 @@
-#include "guild.h"
+#include <discord/guild.h>
 
 bool cmd::discord::operator<(const cmd::discord::guild &lhs, const cmd::discord::guild &rhs)
 {

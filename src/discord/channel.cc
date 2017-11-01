@@ -1,4 +1,4 @@
-#include "channel.h"
+#include <discord/channel.h>
 
 bool cmd::discord::operator<(const channel &lhs, const channel &rhs)
 {

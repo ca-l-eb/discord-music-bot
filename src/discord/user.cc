@@ -1,4 +1,4 @@
-#include "user.h"
+#include <discord/user.h>
 
 bool cmd::discord::operator<(const user &lhs, const user &rhs)
 {

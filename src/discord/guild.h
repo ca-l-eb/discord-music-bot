@@ -1,11 +1,12 @@
 #ifndef CMD_DISCORD_GUILD_H
 #define CMD_DISCORD_GUILD_H
 
-#include <discord/channel.h>
-#include <discord/member.h>
 #include <json.hpp>
 #include <set>
 #include <string>
+
+#include <discord/channel.h>
+#include <discord/member.h>
 
 namespace cmd
 {

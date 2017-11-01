@@ -1,9 +1,10 @@
 #ifndef CMD_DISCORD_MEMBER_H
 #define CMD_DISCORD_MEMBER_H
 
-#include <discord/user.h>
 #include <json.hpp>
 #include <string>
+
+#include <discord/user.h>
 
 namespace cmd
 {
