@@ -1,6 +1,6 @@
 #include <iostream>
 
-#include "hello_responder.h"
+#include <events/hello_responder.h>
 
 cmd::discord::hello_responder::hello_responder(cmd::discord::api &api) : api{&api} {}
 
@@ -17,6 +17,7 @@ void cmd::discord::hello_responder::handle(cmd::discord::gateway &, gtw_op_recv,
         std::cout << user << ": " << content << " in " << channel << "\n";
 
         if (content.find("hi") != std::string::npos) {
+            /*
             auto success = api->send_message(channel, "hey " + user);
             if (success == api_result::success) {
                 std::cout << "Success!\n";
@@ -25,6 +26,7 @@ void cmd::discord::hello_responder::handle(cmd::discord::gateway &, gtw_op_recv,
             } else if (success == api_result::rate_limited) {
                 std::cout << "Rate limited\n";
             }
+             */
         }
     }
 }

@@ -2,7 +2,7 @@
 #include <iostream>
 
 #include <gateway.h>
-#include "heartbeater.h"
+#include <heartbeater.h>
 
 cmd::discord::heartbeater::heartbeater(boost::asio::io_service &service, cmd::discord::beatable &b)
     : b{b}, timer{service}, heartbeat_interval{0}, acked{true}

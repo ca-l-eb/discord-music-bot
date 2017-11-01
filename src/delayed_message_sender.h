@@ -1,10 +1,11 @@
 #ifndef CMD_DISCORD_DELAYED_MESSAGE_SENDER_H
 #define CMD_DISCORD_DELAYED_MESSAGE_SENDER_H
 
-#include <net/websocket.h>
 #include <boost/asio.hpp>
 #include <deque>
 #include <string>
+
+#include <net/websocket.h>
 
 namespace cmd
 {
@@ -15,7 +16,7 @@ class delayed_message_sender
 public:
     delayed_message_sender(boost::asio::io_service &service, cmd::websocket &websocket,
                            int delay_ms);
-    void safe_send(const std::string s, cmd::websocket::message_sent_callback c);
+    void safe_send(const std::string &s, cmd::websocket::message_sent_callback c);
 
 private:
     boost::asio::io_service &service;

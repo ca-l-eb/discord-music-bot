@@ -1,10 +1,10 @@
-#include <http_pool.h>
 #include <iostream>
 #include <thread>
 
-#include "api.h"
-#include "json.hpp"
+#include <api.h>
+#include <json.hpp>
 
+/*
 cmd::discord::api::api(const std::string &token) : token{token}
 {
     // Guess that the global limit is around 20
@@ -86,7 +86,7 @@ cmd::discord::api_response cmd::discord::api::check_success(cmd::http_request &r
             return {api_result::success, response};
         return {api_result::failure, response};
     } catch (std::exception &e) {
-        cmd::http_pool::mark_closed("discordapp.com", 443);
+//        cmd::http_pool::mark_closed("discordapp.com", 443);
     }
 }
 
@@ -165,3 +165,4 @@ std::string cmd::discord::api::get_gateway()
     auto success = check_success(request, 200, api_limit_param::global);
     return "";
 }
+*/

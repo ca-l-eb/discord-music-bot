@@ -7,7 +7,7 @@ namespace cmd
 {
 namespace string_utils
 {
-std::string to_lower(const std::string &s)
+inline std::string to_lower(const std::string &s)
 {
     std::string new_s{s};
     for (int i = 0; i < s.size(); i++)

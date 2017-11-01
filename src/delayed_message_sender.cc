@@ -1,5 +1,6 @@
-#include <delayed_message_sender.h>
 #include <iostream>
+
+#include <delayed_message_sender.h>
 
 cmd::discord::delayed_message_sender::delayed_message_sender(boost::asio::io_service &service,
                                                              cmd::websocket &websocket,
@@ -15,10 +16,10 @@ cmd::discord::delayed_message_sender::delayed_message_sender(boost::asio::io_ser
     send_timer.expires_from_now(boost::posix_time::milliseconds(0));
 }
 
-void cmd::discord::delayed_message_sender::safe_send(const std::string s,
+void cmd::discord::delayed_message_sender::safe_send(const std::string &s,
                                                      cmd::websocket::message_sent_callback c)
 {
-    service.post(timer_strand.wrap([=]() { queue_message(std::move(s), std::move(c)); }));
+    service.post(timer_strand.wrap([=]() { queue_message(s, c); }));
 }
 
 // This idea is from CppCon 2016 Talk by Michael Caisse "Asynchronous IO with Boost.Asio"

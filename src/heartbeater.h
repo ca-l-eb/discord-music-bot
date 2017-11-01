@@ -12,8 +12,6 @@ struct beatable {
     virtual void heartbeat() {}
 };
 
-// On hello opcode, spawns a thread and periodically sends a heartbeat message through *this
-// gateway. On destruction it stops the heartbeat thread and joins it
 class heartbeater
 {
 public:
