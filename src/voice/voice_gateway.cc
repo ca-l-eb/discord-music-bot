@@ -33,6 +33,7 @@ cmd::discord::voice_gateway::voice_gateway(boost::asio::io_service &service,
               << " 'session_id='" << entry.session_id << "' token='" << entry.token << "'\n";
 
     socket.open(boost::asio::ip::udp::v4());
+    std::cout << "Created udp socket\n";
 }
 
 cmd::discord::voice_gateway::~voice_gateway()
@@ -48,7 +49,9 @@ void cmd::discord::voice_gateway::connect(connect_callback c)
                             [&](const boost::system::error_code &e, size_t transferred) {
                                 if (e) {
                                     service.post([&]() { callback(e); });
+                                    std::cerr << "WebSocket connect error: " << e.message() << "\n";
                                 } else {
+                                    std::cout << "WebSocket connected\n";
                                     on_connect(e, transferred);
                                 }
                             });
@@ -75,8 +78,10 @@ void cmd::discord::voice_gateway::identify()
                               {"token", entry.token}}}};
     send(identify.dump(), [&](const boost::system::error_code &e, size_t) {
         if (e) {
-            service.post([&](){callback(e); }); 
+            std::cout << "Voice gateway identify error: " << e.message() << "\n";
+            service.post([&]() { callback(e); });
         } else {
+            std::cout << "Starting event loop\n";
             event_loop();
         }
     });
@@ -100,6 +105,7 @@ void cmd::discord::voice_gateway::event_loop()
                     callback(make_error_code(static_cast<voice_gateway::error>(code)));
                 });
             } else {
+                std::cerr << "voice gateway websocket read error: " << e.message() << "\n";
                 service.post([&]() { callback(e); });
             }
         }
@@ -208,7 +214,6 @@ void cmd::discord::voice_gateway::extract_ready_info(nlohmann::json &data)
         if (e) {
             service.post([&]() { callback(e); });
         } else {
-            timer.cancel();
             send_endpoint = *iterator;
             ip_discovery();
         }
@@ -273,7 +278,7 @@ void cmd::discord::voice_gateway::send_ip_discovery_datagram()
 {
     socket.async_send_to(
         boost::asio::buffer(buffer.data(), 70), send_endpoint,
-        [&](const boost::system::error_code &e, size_t transferred) {
+        [&](const boost::system::error_code &e, size_t) {
             if (e) {
                 std::cerr << "Could not send udp packet to voice server: " << e.message() << "\n";
             }
@@ -318,51 +323,73 @@ void cmd::discord::voice_gateway::notify_heartbeater_hello(nlohmann::json &data)
     }
 }
 
-void cmd::discord::voice_gateway::start_speaking()
+void cmd::discord::voice_gateway::start_speaking(cmd::websocket::message_sent_callback c)
 {
     // Apparently this _doesnt_ need the ssrc
     nlohmann::json speaking_payload{{"op", static_cast<int>(gtw_voice_op_send::speaking)},
                                     {"d", {{"speaking", true}, {"delay", 0}}}};
-    send(speaking_payload.dump(), print_info);
+    send(speaking_payload.dump(), c);
 }
 
-void cmd::discord::voice_gateway::stop_speaking()
+void cmd::discord::voice_gateway::stop_speaking(cmd::websocket::message_sent_callback c)
 {
     nlohmann::json speaking_payload{{"op", static_cast<int>(gtw_voice_op_send::speaking)},
                                     {"d", {{"speaking", false}, {"delay", 0}}}};
-    send(speaking_payload.dump(), print_info);
+    send(speaking_payload.dump(), c);
 }
 
 void cmd::discord::voice_gateway::play(const int16_t *pcm, size_t frame_size)
 {
-    start_speaking();
+    if (!is_speaking)
+        start_speaking([&](const boost::system::error_code &e, size_t) {
+            if (!e) {
+                is_speaking = true;
+                send_audio(pcm, frame_size);
+            }
+        });
+    else 
+        send_audio(pcm, frame_size);
+}
 
+void cmd::discord::voice_gateway::stop()
+{
+    is_speaking = false;
+    stop_speaking([&](const boost::system::error_code &, size_t) {});
+}
+
+void cmd::discord::voice_gateway::send_audio(const int16_t *pcm, size_t frame_size)
+{
     uint8_t *buf = buffer.data();
-    uint8_t opus_encoded_buffer[512];
+    uint8_t opus_encoded_buffer[1024];
     auto write_audio = &buf[12];
     uint8_t nonce[24];
 
     // Set the lower 12 bytes of nonce to 0
     std::memset(&nonce[12], 0, 12);
-
     write_header(buf, seq_num, timestamp);
+
     seq_num++;
     timestamp += frame_size;
 
     // Copy the RTP header to first 12 bytes of nonce
     std::memcpy(nonce, buf, 12);
     int encoded_len = encoder.encode(pcm, frame_size, opus_encoded_buffer, sizeof(opus_encoded_buffer));
+    if (encoded_len < 0)
+        return;
 
     auto error = cmd::discord::crypto::xsalsa20_poly1305_encrypt(
             opus_encoded_buffer, write_audio, encoded_len, secret_key.data(), nonce);
 
-    if (error)
+    if (error) {
+        std::cerr << "Error encrypting data\n";
         return;  // There was a problem encrypting the data
+    }
 
     // Make sure we also count the RTP header and the MAC from encrypting
     encoded_len += 12 + crypto_secretbox_MACBYTES;
 
-    socket.async_send_to(boost::asio::buffer(buf, encoded_len), send_endpoint, print_info);
+    socket.async_send_to(boost::asio::buffer(buf, encoded_len), send_endpoint,
+                         [](const boost::system::error_code &, size_t) {});
 }
 
 void cmd::discord::voice_gateway::write_header(unsigned char *buffer, uint16_t seq_num,

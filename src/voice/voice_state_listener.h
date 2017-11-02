@@ -20,6 +20,14 @@ struct music_process {
     boost::process::child ffmpeg;
     boost::process::pipe audio_transport;
     boost::process::pipe pcm_source;
+    boost::asio::deadline_timer timer;
+    int16_t frame[960 * 2]; // n samples 2 channels
+
+    music_process(boost::asio::io_service &service) : timer{service} {}
+    void close_pipes();
+    void new_pipes();
+    void kill();
+    void wait();
 };
 
 struct voice_gateway_entry {
@@ -64,6 +72,9 @@ private:
     void do_skip(const nlohmann::json &json);
     void do_play(const nlohmann::json &json);
     void do_pause(const nlohmann::json &json);
+
+    void send_audio(voice_gateway_entry &entry);
+    void read_from_pipe(voice_gateway_entry &entry);
 };
 }
 }

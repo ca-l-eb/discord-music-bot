@@ -127,11 +127,13 @@ private:
     enum class connection_state { disconnected, connected } state;
 
     int retries;
+    bool is_speaking;
 
     connect_callback callback;
     
-    void start_speaking();
-    void stop_speaking();
+    void start_speaking(cmd::websocket::message_sent_callback c);
+    void stop_speaking(cmd::websocket::message_sent_callback c);
+    void send_audio(const int16_t *pcm, size_t frame_size);
     void identify();
     void resume();
     void event_loop();
