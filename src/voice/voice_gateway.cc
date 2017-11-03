@@ -340,15 +340,16 @@ void cmd::discord::voice_gateway::stop_speaking(cmd::websocket::message_sent_cal
 
 void cmd::discord::voice_gateway::play(const int16_t *pcm, size_t frame_size)
 {
-    if (!is_speaking)
+    if (!is_speaking) {
+        is_speaking = true;
         start_speaking([&](const boost::system::error_code &e, size_t) {
             if (!e) {
-                is_speaking = true;
                 send_audio(pcm, frame_size);
             }
         });
-    else 
+    } else {
         send_audio(pcm, frame_size);
+    }
 }
 
 void cmd::discord::voice_gateway::stop()
@@ -360,7 +361,7 @@ void cmd::discord::voice_gateway::stop()
 void cmd::discord::voice_gateway::send_audio(const int16_t *pcm, size_t frame_size)
 {
     uint8_t *buf = buffer.data();
-    uint8_t opus_encoded_buffer[1024];
+    uint8_t opus_encoded_buffer[512];
     auto write_audio = &buf[12];
     uint8_t nonce[24];
 
@@ -390,6 +391,7 @@ void cmd::discord::voice_gateway::send_audio(const int16_t *pcm, size_t frame_si
 
     socket.async_send_to(boost::asio::buffer(buf, encoded_len), send_endpoint,
                          [](const boost::system::error_code &, size_t) {});
+    std::cout << "[RTP] " << encoded_len << " bytes sent\r";
 }
 
 void cmd::discord::voice_gateway::write_header(unsigned char *buffer, uint16_t seq_num,

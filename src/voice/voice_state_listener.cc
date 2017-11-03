@@ -191,10 +191,10 @@ void cmd::discord::voice_state_listener::do_leave(const nlohmann::json &json)
         
         auto &process = it->second.process;
         if (process) {
+            process->timer.cancel();
             process->close_pipes();
             process->kill();
             process->wait();
-            process->timer.cancel();
             it->second.process = nullptr;
         }
         leave_voice_server(guild_id);
@@ -234,7 +234,8 @@ void cmd::discord::voice_state_listener::do_skip(const nlohmann::json &json)
     if (it == voice_gateways.end())
         return;
 
-    if (it->second.state != voice_gateway_entry::gateway_state::disconnected) {
+    if (it->second.state == voice_gateway_entry::gateway_state::playing ||
+        it->second.state == voice_gateway_entry::gateway_state::paused) {
         it->second.state = voice_gateway_entry::gateway_state::connected;
         auto &process = it->second.process;
         if (process) {
@@ -328,11 +329,11 @@ void cmd::discord::voice_state_listener::send_audio(voice_gateway_entry &entry)
         std::string next = entry.music_queue.front();
         entry.music_queue.pop_front();
 
-        // Close the old pipes and create new ones
+        // Get new pipes
         entry.process->new_pipes();
 
         // Kill any previously running proceses and create new ones
-        entry.process->kill();
+        // entry.process->kill();
         entry.process->wait();;
 
         entry.process->youtube_dl = boost::process::child{"youtube-dl -f 251 -o - " + next,
@@ -366,18 +367,17 @@ void cmd::discord::voice_state_listener::read_from_pipe(voice_gateway_entry &ent
         entry.process->pcm_source.read((char *) entry.process->frame, sizeof(entry.process->frame));
     if (size > 0) {
         size_t num_frames = size / (sizeof(int16_t) * 2);
-        entry.gateway->play(entry.process->frame, num_frames);
-
         entry.process->timer.expires_from_now(boost::posix_time::milliseconds(num_frames / 48));
+        entry.gateway->play(entry.process->frame, num_frames);
         entry.process->timer.async_wait([&](const boost::system::error_code &e) {
             if (!e && entry.state == voice_gateway_entry::gateway_state::playing)
                 read_from_pipe(entry);
         });
     } else {
         entry.gateway->stop();
-        std::cout << "Music stopped\n";
 
         // Processes have finished, wait for them
+        entry.process->close_pipes();
         entry.process->wait();
 
         // Play next song if any in queue
@@ -389,45 +389,29 @@ void cmd::discord::voice_state_listener::read_from_pipe(voice_gateway_entry &ent
 
 void cmd::discord::music_process::close_pipes()
 {
-    if (audio_transport.is_open())
+    if (audio_transport.is_open()) {
         audio_transport.close();
-    if (pcm_source.is_open())
+    }
+    if (pcm_source.is_open()) {
         pcm_source.close();
+    }
 }
 
 void cmd::discord::music_process::new_pipes()
 {
-    // Make sure pipes are closed before creating new ones
     close_pipes();
-
     audio_transport = boost::process::pipe{};
     pcm_source = boost::process::pipe{};
 }
 
 void cmd::discord::music_process::kill()
 {
-    if (youtube_dl.running()) {
-        std::cout << "killing youtube-dl\n";
-        youtube_dl.terminate();
-    } else {
-        std::cout << "youtube-dl not running\n";
-    }
-    if (ffmpeg.running()) {
-        std::cout << "killing ffmpeg\n";
-        ffmpeg.terminate(); 
-    } else {
-        std::cout << "ffmpeg not running\n";
-    }
+    youtube_dl.terminate();
+    ffmpeg.terminate();
 }
 
 void cmd::discord::music_process::wait()
 {
-    if (youtube_dl.valid()) {
-        std::cout << "Waiting for youtube-dl\n";
-        youtube_dl.wait();
-    }
-    if (ffmpeg.valid()) {
-        std::cout << "Waiting for ffmpeg\n";
-        ffmpeg.wait();
-    }
+    youtube_dl.wait();
+    ffmpeg.wait();
 }
