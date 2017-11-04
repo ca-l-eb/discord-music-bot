@@ -265,7 +265,7 @@ void cmd::discord::voice_state_listener::do_play(const nlohmann::json &json)
 
     if (!it->second.music_queue.empty() ||
         it->second.state == voice_gateway_entry::gateway_state::paused) {
-        send_audio(it->second);
+        play(it->second);
     }
 }
 
@@ -320,79 +320,163 @@ void cmd::discord::voice_state_listener::leave_voice_server(const std::string &g
     });
 }
 
-void cmd::discord::voice_state_listener::send_audio(voice_gateway_entry &entry)
+void cmd::discord::voice_state_listener::play(voice_gateway_entry &entry) 
 {
     if (entry.state == voice_gateway_entry::gateway_state::connected) {
-        // Take song off music queue and create new youtube_dl and ffmpeg process for music
-        if (entry.music_queue.empty())
-            return;
-        std::string next = entry.music_queue.front();
-        entry.music_queue.pop_front();
-
-        // Get new pipes
-        entry.process->new_pipes();
-
-        // Kill any previously running proceses and create new ones
-        // entry.process->kill();
-        entry.process->wait();;
-
-        entry.process->youtube_dl = boost::process::child{"youtube-dl -f 251 -o - " + next,
-                            boost::process::std_in < boost::process::null,
-                            boost::process::std_err > boost::process::null,
-                            boost::process::std_out > entry.process->audio_transport};
-        entry.process->ffmpeg = boost::process::child{"ffmpeg -i - -ac 2 -ar 48000 -f s16le -",
-                            boost::process::std_in < entry.process->audio_transport,
-                            boost::process::std_out > entry.process->pcm_source,
-                            boost::process::std_err > boost::process::null};
-
-        std::cout << "created youtube_dl and ffmpeg processes for " << next << "\n";
-
-        entry.state = voice_gateway_entry::gateway_state::paused;
+        make_audio_process(entry);
+    } else if (entry.state == voice_gateway_entry::gateway_state::paused) {
+        // Resume
+        entry.state = voice_gateway_entry::gateway_state::playing;
     }
-    if (entry.state == voice_gateway_entry::gateway_state::paused) {
-        // Use existing music process and continue sending
-    }
-    entry.state = voice_gateway_entry::gateway_state::playing;
 
-    entry.process->timer.expires_from_now(boost::posix_time::milliseconds(0));
-    entry.process->timer.async_wait([&](const boost::system::error_code &e) {
-        if (!e && entry.state == voice_gateway_entry::gateway_state::playing)
-            read_from_pipe(entry);
-    });
+    if (entry.state == voice_gateway_entry::gateway_state::playing) {
+        send_audio(entry);
+    }
 }
 
-void cmd::discord::voice_state_listener::read_from_pipe(voice_gateway_entry &entry) 
+
+void cmd::discord::voice_state_listener::make_audio_process(voice_gateway_entry &entry)
 {
-    auto size =
-        entry.process->pcm_source.read((char *) entry.process->frame, sizeof(entry.process->frame));
-    if (size > 0) {
-        size_t num_frames = size / (sizeof(int16_t) * 2);
-        entry.process->timer.expires_from_now(boost::posix_time::milliseconds(num_frames / 48));
-        entry.gateway->play(entry.process->frame, num_frames);
-        entry.process->timer.async_wait([&](const boost::system::error_code &e) {
-            if (!e && entry.state == voice_gateway_entry::gateway_state::playing)
-                read_from_pipe(entry);
-        });
-    } else {
-        entry.gateway->stop();
+    // Take song off music queue and create new youtube_dl and ffmpeg process for music
+    if (entry.music_queue.empty())
+        return;
+    std::string next = entry.music_queue.front();
+    entry.music_queue.pop_front();
 
-        // Processes have finished, wait for them
-        entry.process->close_pipes();
+    // Assumes previous pipes have been reset, and proceses already waited on
+    
+    entry.process->youtube_dl = boost::process::child{"youtube-dl -f 251 -o - " + next,
+        boost::process::std_in < boost::process::null,
+        boost::process::std_err > boost::process::null,
+        boost::process::std_out > entry.process->audio_transport};
+    entry.process->ffmpeg = boost::process::child{"ffmpeg -i - -ac 2 -ar 48000 -f s16le -",
+        boost::process::std_in < entry.process->audio_transport,
+        boost::process::std_out > entry.process->pcm_source,
+        boost::process::std_err > boost::process::null};
+
+    std::cout << "created youtube_dl and ffmpeg processes for " << next << "\n";
+
+    // Start asynchronous reads from pipe to begin filling buffer with sound samples (1 second)
+    auto mutable_buffer = entry.process->buffer.prepare(48000 * 2 * sizeof(int16_t));
+    boost::asio::async_read(entry.process->pcm_source, mutable_buffer,
+                            [&](const boost::system::error_code &e, size_t transferred) {
+                                read_from_pipe(e, transferred, entry);
+                            });
+}
+
+void cmd::discord::voice_state_listener::read_from_pipe(const boost::system::error_code &e,
+                                                        size_t transferred,
+                                                        voice_gateway_entry &entry)
+{
+    // std::cout << "Read " << transferred << " bytes, " << e.message() << "\n";
+    if (transferred > 0) {
+        entry.process->buffer.commit(transferred);
+        encode_audio(entry);
+    }
+    if(!e) {
+        // Read more, until we get eof
+        auto mutable_buffer = entry.process->buffer.prepare(48000 * 2 * sizeof(int16_t));
+        boost::asio::async_read(entry.process->pcm_source, mutable_buffer,
+                                [&](const boost::system::error_code &e, size_t transferred) {
+                                    read_from_pipe(e, transferred, entry);
+                                });
+
+        if (!entry.process->frames.empty() &&
+            entry.state == voice_gateway_entry::gateway_state::connected) {
+            std::cout << "Playing audio...\n";
+            entry.state = voice_gateway_entry::gateway_state::paused;
+            play(entry); // This time we'll actually send data
+        }
+    } else if (e == boost::asio::error::eof) {
+        // Processes have completed
+        std::cout << "Process finished reading from pipe\n";
+        try {
+            entry.process->new_pipes();
+        } catch(std::exception &e) {
+            std::cerr << e.what() << "\n";
+        }
+        entry.process->kill();
         entry.process->wait();
+    } else {
+        std::cerr << "Pipe read error: " << e.message() << "\n";
+    }
+}
 
-        // Play next song if any in queue
+void cmd::discord::voice_state_listener::encode_audio(voice_gateway_entry &entry)
+{
+    std::lock_guard<std::mutex>(entry.process->mutex);
+
+    const auto *pcm = boost::asio::buffer_cast<const int16_t *>(entry.process->buffer.data());
+
+    // 960 samples (20ms) of 2 channel audio at 16 bit
+    constexpr int frame_size = 960;
+    constexpr int len = frame_size * 2 * sizeof(int16_t);
+    uint8_t buf[512];
+
+    int num_blocks = entry.process->buffer.size() / len;
+    for (int i = 0; i < num_blocks; i++) {
+        auto encoded_len = entry.process->encoder.encode(pcm, frame_size, buf, sizeof(buf));
+        if (encoded_len > 0) {
+            std::vector<uint8_t> vec(buf, buf + encoded_len);
+            entry.process->frames.emplace_back(std::move(vec), frame_size);
+        }
+        pcm += frame_size * 2;
+        entry.process->buffer.consume(len);
+    }
+    if (entry.process->buffer.size() > 0) {
+        auto remaining_samples = entry.process->buffer.size() / (2 * sizeof(int16_t));
+        std::cout << "Encoding remaining " << remaining_samples << " samples\n";
+        auto encoded_len = entry.process->encoder.encode(pcm, remaining_samples, buf, sizeof(buf));
+        if (encoded_len > 0) {
+            std::vector<uint8_t> vec(buf, buf + encoded_len);
+            entry.process->frames.emplace_back(std::move(vec), frame_size);
+        }
+        entry.process->buffer.consume(entry.process->buffer.size());
+    }
+}
+
+void cmd::discord::voice_state_listener::send_audio(voice_gateway_entry &entry)
+{
+    if (!entry.process->frames.empty()) {
+        if (entry.state == voice_gateway_entry::gateway_state::playing) {
+            std::lock_guard<std::mutex> guard(entry.process->mutex);
+
+            entry.process->current_frame = entry.process->frames.front();
+            entry.process->frames.pop_front();
+            auto &frame = entry.process->current_frame;
+
+            // Next timer expires after frame_size / 48000 seconds, or frame_size / 48 ms
+            entry.process->timer.expires_from_now(
+                boost::posix_time::milliseconds(frame.frame_size / 48));
+
+            // Play the frame
+            entry.gateway->play(frame.encoded_data.data(), frame.encoded_data.size(),
+                                frame.frame_size);
+
+            // Enqueue wait for the frame to send
+            entry.process->timer.async_wait([&](const boost::system::error_code &e) {
+                if (!e && entry.state == voice_gateway_entry::gateway_state::playing) {
+                    send_audio(entry);
+                }
+            });
+        }
+    } else if(entry.state == voice_gateway_entry::gateway_state::playing) {
+        // If we are still in the playing state and there are no more frames to read,
+        // play the next entry
+        std::cout << "No more frames\n";
         entry.state = voice_gateway_entry::gateway_state::connected;
-        if (!entry.music_queue.empty())
-            send_audio(entry);
+        play(entry);
     }
 }
 
 void cmd::discord::music_process::close_pipes()
 {
     if (audio_transport.is_open()) {
+        std::cout << "Closing audio transport\n";
         audio_transport.close();
     }
     if (pcm_source.is_open()) {
+        std::cout << "Closing pcm source\n";
         pcm_source.close();
     }
 }
@@ -401,7 +485,9 @@ void cmd::discord::music_process::new_pipes()
 {
     close_pipes();
     audio_transport = boost::process::pipe{};
-    pcm_source = boost::process::pipe{};
+    std::cout << "Assigned new audio transport pipe\n";
+    pcm_source = boost::process::async_pipe{service};
+    std::cout << "Assigned new pcm source\n";
 }
 
 void cmd::discord::music_process::kill()

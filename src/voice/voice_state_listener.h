@@ -1,6 +1,7 @@
 #ifndef CMD_DISCORD_VOICE_STATE_LISTENER_H
 #define CMD_DISCORD_VOICE_STATE_LISTENER_H
 
+#include <array>
 #include <boost/asio.hpp>
 #include <boost/process.hpp>
 #include <deque>
@@ -8,6 +9,7 @@
 
 #include <events/event_listener.h>
 #include <gateway.h>
+#include <voice/opus_encoder.h>
 
 namespace cmd
 {
@@ -15,15 +17,34 @@ namespace discord
 {
 class voice_gateway;
 
+struct music_frame {
+    std::vector<uint8_t> encoded_data;
+    uint16_t frame_size;
+
+    music_frame(std::vector<uint8_t> &&d, uint16_t frame_size)
+        : encoded_data{d}, frame_size{frame_size}
+    {
+    }
+    music_frame() = default;
+};
+
 struct music_process {
+    boost::asio::io_service &service;
     boost::process::child youtube_dl;
     boost::process::child ffmpeg;
     boost::process::pipe audio_transport;
-    boost::process::pipe pcm_source;
+    boost::process::async_pipe pcm_source;
     boost::asio::deadline_timer timer;
-    int16_t frame[960 * 2]; // n samples 2 channels
+    boost::asio::streambuf buffer;
+    std::deque<music_frame> frames;
+    std::mutex mutex;
+    cmd::discord::opus_encoder encoder{2, 48000};
+    music_frame current_frame;
 
-    music_process(boost::asio::io_service &service) : timer{service} {}
+    music_process(boost::asio::io_service &service)
+        : service{service}, pcm_source{service}, timer{service}
+    {
+    }
     void close_pipes();
     void new_pipes();
     void kill();
@@ -73,8 +94,12 @@ private:
     void do_play(const nlohmann::json &json);
     void do_pause(const nlohmann::json &json);
 
+    void play(voice_gateway_entry &entry);
+    void make_audio_process(voice_gateway_entry &entry);
+    void read_from_pipe(const boost::system::error_code &e, size_t transferred,
+                        voice_gateway_entry &entry);
     void send_audio(voice_gateway_entry &entry);
-    void read_from_pipe(voice_gateway_entry &entry);
+    void encode_audio(voice_gateway_entry &entry);
 };
 }
 }

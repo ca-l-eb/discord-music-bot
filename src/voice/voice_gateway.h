@@ -8,7 +8,6 @@
 
 #include <delayed_message_sender.h>
 #include <heartbeater.h>
-#include <voice/opus_encoder.h>
 #include <net/websocket.h>
 
 namespace cmd
@@ -100,7 +99,7 @@ public:
     void heartbeat() override;
     void send(const std::string &s, cmd::websocket::message_sent_callback c);
     void connect(connect_callback c);
-    void play(const int16_t *pcm, size_t frame_size);
+    void play(const uint8_t *opus_encoded, size_t encoded_len, size_t frame_size);
     void stop();
 
 private:
@@ -119,7 +118,6 @@ private:
     std::vector<uint8_t> secret_key;
     std::vector<uint8_t> buffer;
     std::string external_ip;
-    cmd::discord::opus_encoder encoder;
     uint32_t timestamp;
     uint16_t seq_num;
 
@@ -133,7 +131,7 @@ private:
     
     void start_speaking(cmd::websocket::message_sent_callback c);
     void stop_speaking(cmd::websocket::message_sent_callback c);
-    void send_audio(const int16_t *pcm, size_t frame_size);
+    void send_audio(const uint8_t *opus_encoded, size_t encoded_len, size_t frame_size);
     void identify();
     void resume();
     void event_loop();

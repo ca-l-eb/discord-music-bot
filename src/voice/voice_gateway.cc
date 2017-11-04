@@ -24,7 +24,6 @@ cmd::discord::voice_gateway::voice_gateway(boost::asio::io_service &service,
     , ssrc{0}
     , udp_port{0}
     , buffer(512)
-    , encoder{2, 48000}
     , timestamp{(uint32_t) rand()}
     , seq_num{(uint16_t) rand()}
     , state{connection_state::disconnected}
@@ -338,48 +337,45 @@ void cmd::discord::voice_gateway::stop_speaking(cmd::websocket::message_sent_cal
     send(speaking_payload.dump(), c);
 }
 
-void cmd::discord::voice_gateway::play(const int16_t *pcm, size_t frame_size)
+void cmd::discord::voice_gateway::play(const uint8_t *opus_encoded, size_t encoded_len,
+                                       size_t frame_size)
 {
     if (!is_speaking) {
         is_speaking = true;
-        start_speaking([&](const boost::system::error_code &e, size_t) {
+        start_speaking([=](const boost::system::error_code &e, size_t) {
             if (!e) {
-                send_audio(pcm, frame_size);
+                send_audio(opus_encoded, encoded_len, frame_size);
             }
         });
     } else {
-        send_audio(pcm, frame_size);
+        send_audio(opus_encoded, encoded_len, frame_size);
     }
 }
 
 void cmd::discord::voice_gateway::stop()
 {
     is_speaking = false;
-    stop_speaking([&](const boost::system::error_code &, size_t) {});
+    stop_speaking([](const boost::system::error_code &, size_t) {});
 }
 
-void cmd::discord::voice_gateway::send_audio(const int16_t *pcm, size_t frame_size)
+void cmd::discord::voice_gateway::send_audio(const uint8_t *opus_encoded, size_t encoded_len,
+                                             size_t frame_size)
 {
     uint8_t *buf = buffer.data();
-    uint8_t opus_encoded_buffer[512];
     auto write_audio = &buf[12];
     uint8_t nonce[24];
 
-    // Set the lower 12 bytes of nonce to 0
-    std::memset(&nonce[12], 0, 12);
     write_header(buf, seq_num, timestamp);
+
+    // First 12 bytes of nonce are RTP header, next 12 are 0s
+    std::memcpy(nonce, buf, 12);
+    std::memset(&nonce[12], 0, 12);
 
     seq_num++;
     timestamp += frame_size;
 
-    // Copy the RTP header to first 12 bytes of nonce
-    std::memcpy(nonce, buf, 12);
-    int encoded_len = encoder.encode(pcm, frame_size, opus_encoded_buffer, sizeof(opus_encoded_buffer));
-    if (encoded_len < 0)
-        return;
-
     auto error = cmd::discord::crypto::xsalsa20_poly1305_encrypt(
-            opus_encoded_buffer, write_audio, encoded_len, secret_key.data(), nonce);
+            opus_encoded, write_audio, encoded_len, secret_key.data(), nonce);
 
     if (error) {
         std::cerr << "Error encrypting data\n";
