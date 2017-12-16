@@ -10,7 +10,7 @@ namespace string_utils
 inline std::string to_lower(const std::string &s)
 {
     std::string new_s{s};
-    for (int i = 0; i < s.size(); i++)
+    for (size_t i = 0; i < s.size(); i++)
         new_s[i] = static_cast<char>(std::tolower(s[i]));
     return new_s;
 }

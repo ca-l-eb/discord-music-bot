@@ -192,10 +192,11 @@ void cmd::discord::voice_state_listener::do_leave(const nlohmann::json &json)
         auto &process = it->second.process;
         if (process) {
             process->timer.cancel();
-            process->close_pipes();
+            process->new_pipes();
             process->kill();
             process->wait();
-            it->second.process = nullptr;
+            process->frames.clear();
+            //it->second.process = nullptr;
         }
         leave_voice_server(guild_id);
     }
@@ -240,9 +241,10 @@ void cmd::discord::voice_state_listener::do_skip(const nlohmann::json &json)
         auto &process = it->second.process;
         if (process) {
             process->timer.cancel();
-            process->close_pipes();
+            process->new_pipes();
             process->kill();
             process->wait();
+            process->frames.clear();
         }
         if (!it->second.music_queue.empty())
             do_play(json);
@@ -356,8 +358,8 @@ void cmd::discord::voice_state_listener::make_audio_process(voice_gateway_entry 
 
     std::cout << "created youtube_dl and ffmpeg processes for " << next << "\n";
 
-    // Start asynchronous reads from pipe to begin filling buffer with sound samples (1 second)
-    auto mutable_buffer = entry.process->buffer.prepare(48000 * 2 * sizeof(int16_t));
+    // Start asynchronous reads from pipe to begin filling buffer with sound samples
+    auto mutable_buffer = entry.process->buffer.prepare(24000 * 2 * sizeof(int16_t));
     boost::asio::async_read(entry.process->pcm_source, mutable_buffer,
                             [&](const boost::system::error_code &e, size_t transferred) {
                                 read_from_pipe(e, transferred, entry);
@@ -375,7 +377,7 @@ void cmd::discord::voice_state_listener::read_from_pipe(const boost::system::err
     }
     if(!e) {
         // Read more, until we get eof
-        auto mutable_buffer = entry.process->buffer.prepare(48000 * 2 * sizeof(int16_t));
+        auto mutable_buffer = entry.process->buffer.prepare(24000 * 2 * sizeof(int16_t));
         boost::asio::async_read(entry.process->pcm_source, mutable_buffer,
                                 [&](const boost::system::error_code &e, size_t transferred) {
                                     read_from_pipe(e, transferred, entry);
@@ -425,7 +427,6 @@ void cmd::discord::voice_state_listener::encode_audio(voice_gateway_entry &entry
     }
     if (entry.process->buffer.size() > 0) {
         auto remaining_samples = entry.process->buffer.size() / (2 * sizeof(int16_t));
-        std::cout << "Encoding remaining " << remaining_samples << " samples\n";
         auto encoded_len = entry.process->encoder.encode(pcm, remaining_samples, buf, sizeof(buf));
         if (encoded_len > 0) {
             std::vector<uint8_t> vec(buf, buf + encoded_len);
@@ -463,7 +464,7 @@ void cmd::discord::voice_state_listener::send_audio(voice_gateway_entry &entry)
     } else if(entry.state == voice_gateway_entry::gateway_state::playing) {
         // If we are still in the playing state and there are no more frames to read,
         // play the next entry
-        std::cout << "No more frames\n";
+        std::cout << "Sound clip finished\n";
         entry.state = voice_gateway_entry::gateway_state::connected;
         play(entry);
     }

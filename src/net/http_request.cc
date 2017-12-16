@@ -3,7 +3,7 @@
 
 #include <net/http_request.h>
 
-http_request::http_request(boost::asio::io_service &io, const std::string &host, int port,
+http_request::http_request(boost::asio::io_service &io, const std::string &host, int,
                            const std::string &resource)
     : sock{io}, resource{resource}, host{host}, bytes_to_write{0}
 {

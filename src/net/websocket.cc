@@ -180,7 +180,7 @@ void cmd::websocket::send_upgrade()
 
     // Submit to the write queue the HTTP connection upgrade request, and the callback
     io.post(write_strand.wrap([=]() {
-        queue_message(data, [=](const boost::system::error_code &e, size_t transferred) {
+        queue_message(data, [=](const boost::system::error_code &e, size_t) {
             on_websocket_upgrade_sent(e);
         });
     }));
