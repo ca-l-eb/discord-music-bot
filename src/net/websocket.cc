@@ -1,5 +1,6 @@
 #include <openssl/sha.h>
 #include <boost/bind.hpp>
+#include <boost/asio/placeholders.hpp>
 #include <chrono>
 #include <iomanip>
 #include <iostream>

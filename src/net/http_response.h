@@ -1,6 +1,8 @@
 #ifndef HTTP_RESPONSE_H
 #define HTTP_RESPONSE_H
 
+#include <boost/asio/streambuf.hpp>
+
 #include <map>
 #include <string>
 

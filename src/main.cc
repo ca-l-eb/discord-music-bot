@@ -1,3 +1,4 @@
+#include <csignal>
 #include <cstdlib>
 #include <iostream>
 #include <thread>

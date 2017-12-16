@@ -1,7 +1,10 @@
 #ifndef WEBSOCKET_H
 #define WEBSOCKET_H
 
-#include <boost/asio.hpp>
+#include <boost/asio/io_service.hpp>
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/strand.hpp>
+#include <boost/asio/streambuf.hpp>
 #include <boost/asio/ssl.hpp>
 #include <cstdint>
 #include <deque>

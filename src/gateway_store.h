@@ -16,7 +16,7 @@ class gateway_store
 {
 public:
     void parse_guild(const nlohmann::json &json);
-    
+
     // Returns the guild_id that the channel is in
     const std::string lookup_channel(const std::string &channel_id);
     cmd::discord::guild get_guild(const std::string &guild_id);

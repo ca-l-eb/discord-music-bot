@@ -13,7 +13,8 @@ cmd::discord::gateway::gateway(boost::asio::io_service &service, const std::stri
     , state{connection_state::disconnected}
 {
     gateway_event_map.emplace("READY", [&](nlohmann::json &data) { on_ready(data); });
-    gateway_event_map.emplace("GUILD_CREATE", [&](nlohmann::json &data) { store.parse_guild(data); });
+    gateway_event_map.emplace("GUILD_CREATE",
+                              [&](nlohmann::json &data) { store.parse_guild(data); });
     gateway_event_map.emplace("RESUME",
                               [&](nlohmann::json &) { state = connection_state::connected; });
 
@@ -186,7 +187,8 @@ void cmd::discord::gateway::event_loop()
             if (e == cmd::websocket::make_error_code(
                          cmd::websocket::error::websocket_connection_closed)) {
                 // Convert the close code to a gateway error message
-                auto ec = gateway::make_error_code(static_cast<gateway::error>(websocket.close_code()));
+                auto ec =
+                    gateway::make_error_code(static_cast<gateway::error>(websocket.close_code()));
                 throw std::runtime_error(ec.message());
             }
             throw std::runtime_error("There was an error: " + e.message());

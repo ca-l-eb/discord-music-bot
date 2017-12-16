@@ -1,8 +1,9 @@
 #ifndef CMD_DISCORD_HEARTBEATER_H
 #define CMD_DISCORD_HEARTBEATER_H
 
+#include <boost/asio/deadline_timer.hpp>
+#include <boost/asio/io_service.hpp>
 #include <json.hpp>
-#include <boost/asio.hpp>
 
 namespace cmd
 {
@@ -26,7 +27,7 @@ private:
     boost::asio::deadline_timer timer;
     int heartbeat_interval;
     bool acked;
-    
+
     void start_heartbeat_timer();
     void on_timer_fire(const boost::system::error_code &e);
 };

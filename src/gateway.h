@@ -105,7 +105,7 @@ private:
     cmd::websocket websocket;
     cmd::discord::delayed_message_sender sender;
     cmd::discord::gateway_store store;
-   
+
     // Map an event name (e.g. READY, RESUMED, etc.) to a handler name
     std::multimap<std::string, std::string> event_name_to_handler_name;
 

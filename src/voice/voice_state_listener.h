@@ -2,8 +2,12 @@
 #define CMD_DISCORD_VOICE_STATE_LISTENER_H
 
 #include <array>
-#include <boost/asio.hpp>
-#include <boost/process.hpp>
+#include <boost/asio/io_service.hpp>
+#include <boost/asio/deadline_timer.hpp>
+#include <boost/asio/streambuf.hpp>
+#include <boost/process/child.hpp>
+#include <boost/process/pipe.hpp>
+#include <boost/process/async_pipe.hpp>
 #include <deque>
 #include <memory>
 

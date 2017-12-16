@@ -1,7 +1,9 @@
 #ifndef CMD_DISCORD_DELAYED_MESSAGE_SENDER_H
 #define CMD_DISCORD_DELAYED_MESSAGE_SENDER_H
 
-#include <boost/asio.hpp>
+#include <boost/asio/deadline_timer.hpp>
+#include <boost/asio/io_service.hpp>
+#include <boost/asio/strand.hpp>
 #include <deque>
 #include <string>
 

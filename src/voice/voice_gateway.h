@@ -5,6 +5,9 @@
 #include <iostream>
 #include <vector>
 #include <cstdint>
+#include <boost/asio/io_service.hpp>
+#include <boost/asio/ip/udp.hpp>
+#include <boost/asio/deadline_timer.hpp>
 
 #include <delayed_message_sender.h>
 #include <heartbeater.h>

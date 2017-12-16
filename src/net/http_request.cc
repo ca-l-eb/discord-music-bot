@@ -1,4 +1,5 @@
 #include <boost/bind.hpp>
+#include <boost/asio/placeholders.hpp>
 #include <iostream>
 
 #include <net/http_request.h>
