@@ -1,11 +1,16 @@
 #ifndef CMD_RESOURCE_PARSER_H
 #define CMD_RESOURCE_PARSER_H
 
-namespace cmd
-{
+#include <string>
+
 namespace resource_parser{
-    std::tuple<std::string, std::string, int, std::string> parse(const std::string &url);
-}
+    struct parsed_url {
+        std::string protocol;
+        std::string host;
+        int port;
+        std::string resource;
+    };
+    parsed_url parse(const std::string &url);
 }
 
 #endif

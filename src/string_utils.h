@@ -3,8 +3,6 @@
 
 #include <string>
 
-namespace cmd
-{
 namespace string_utils
 {
 inline std::string to_lower(const std::string &s)
@@ -15,6 +13,5 @@ inline std::string to_lower(const std::string &s)
     return new_s;
 }
 }
-}
 
-#endif  // CMDSOCK_STRING_UTILS_H
+#endif

@@ -22,16 +22,17 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE;
         }
 
-        boost::asio::io_service service;
-        //        cmd::discord::api api{token};
-        cmd::discord::gateway gateway{service, token};
+        boost::asio::io_context ctx;
+        boost::asio::ip::tcp::resolver resolver{ctx};
+        //        discord::api api{token};
+        discord::gateway gateway{ctx, token, resolver};
 
         //        gateway.add_listener("ALL", "echo",
-        //        std::make_shared<cmd::discord::echo_listener>());
+        //        std::make_shared<discord::echo_listener>());
         //        gateway.add_listener("MESSAGE_CREATE", "hello_responder",
-        //                             std::make_shared<cmd::discord::hello_responder>(api));
+        //                             std::make_shared<discord::hello_responder>(api));
 
-        service.run();
+        ctx.run();
     } catch (std::exception &e) {
         std::cerr << "Exception: " << e.what() << "\n";
         return EXIT_FAILURE;

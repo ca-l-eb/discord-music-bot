@@ -5,8 +5,6 @@
 
 #include <opus/opus.h>
 
-namespace cmd
-{
 namespace discord
 {
 class opus_encoder
@@ -21,7 +19,6 @@ public:
 private:
     OpusEncoder *encoder;
 };
-}
 }
 
 #endif

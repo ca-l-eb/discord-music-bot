@@ -1,15 +1,14 @@
 #ifndef ASIO_HTTP_REQUEST_H
 #define ASIO_HTTP_REQUEST_H
 
-#include <boost/asio/io_service.hpp>
-#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio.hpp>
 #include <string>
 #include <net/http_response.h>
 
 class http_request
 {
 public:
-    http_request(boost::asio::io_service &io, const std::string &host, int port,
+    http_request(boost::asio::io_context &io, const std::string &host, int port,
                  const std::string &resource);
 
 private:
@@ -25,4 +24,4 @@ private:
     void on_write(const boost::system::error_code &e, size_t wrote);
 };
 
-#endif  // ASIO_HTTP_REQUEST_H
+#endif

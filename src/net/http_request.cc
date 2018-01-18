@@ -1,18 +1,16 @@
-#include <boost/bind.hpp>
-#include <boost/asio/placeholders.hpp>
 #include <iostream>
 
 #include <net/http_request.h>
 
-http_request::http_request(boost::asio::io_service &io, const std::string &host, int,
+http_request::http_request(boost::asio::io_context &io, const std::string &host, int,
                            const std::string &resource)
     : sock{io}, resource{resource}, host{host}, bytes_to_write{0}
 {
     boost::asio::ip::tcp::resolver resolver{io};
     boost::asio::ip::tcp::resolver::query query{host, "http"};
     auto loc = resolver.resolve(query);
-    sock.async_connect(
-        *loc, boost::bind(&http_request::on_connect, this, boost::asio::placeholders::error));
+    auto callback = [=](auto &ec) { on_connect(ec); };
+    sock.async_connect(*loc, callback);
 }
 
 void http_request::on_connect(const boost::system::error_code &e)
@@ -26,10 +24,8 @@ void http_request::on_connect(const boost::system::error_code &e)
     req += "Connection: close\r\n";
     req += "\r\n";
     bytes_to_write = req.size();
-    sock.async_write_some(
-        boost::asio::buffer(req.data(), req.size()),
-        boost::bind(&http_request::on_write, this, boost::asio::placeholders::error,
-                    boost::asio::placeholders::bytes_transferred));
+    auto callback = [=](auto &ec, auto transferred) { on_write(ec, transferred); };
+    sock.async_write_some(boost::asio::buffer(req.data(), req.size()), callback);
 }
 
 void http_request::on_write(const boost::system::error_code &e, size_t wrote)

@@ -3,8 +3,6 @@
 
 #include <json.hpp>
 
-namespace cmd
-{
 namespace discord
 {
 struct user {
@@ -14,9 +12,8 @@ struct user {
 };
 
 bool operator<(const user &lhs, const user &rhs);
-void to_json(nlohmann::json &json, const cmd::discord::user &u);
-void from_json(const nlohmann::json &json, cmd::discord::user &u);
-}
+void to_json(nlohmann::json &json, const discord::user &u);
+void from_json(const nlohmann::json &json, discord::user &u);
 }
 
 #endif

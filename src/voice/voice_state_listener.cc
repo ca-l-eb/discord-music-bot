@@ -1,6 +1,4 @@
-#include <boost/process/io.hpp>
-#include <boost/asio/read.hpp>
-#include <boost/asio/write.hpp>
+#include <boost/process.hpp>
 #include <string_utils.h>
 #include <iostream>
 #include <regex>
@@ -8,16 +6,16 @@
 #include <net/resource_parser.h>
 #include <voice/voice_state_listener.h>
 
-cmd::discord::voice_state_listener::voice_state_listener(boost::asio::io_service &service,
-                                                         cmd::discord::gateway &gateway,
-                                                         cmd::discord::gateway_store &store)
-    : service{service}, gateway{gateway}, store{store}
+discord::voice_state_listener::voice_state_listener(boost::asio::io_context &ctx,
+                                                         discord::gateway &gateway,
+                                                         discord::gateway_store &store)
+    : ctx{ctx}, gateway{gateway}, store{store}
 {
 }
 
-cmd::discord::voice_state_listener::~voice_state_listener() {}
+discord::voice_state_listener::~voice_state_listener() {}
 
-void cmd::discord::voice_state_listener::handle(cmd::discord::gateway &, gtw_op_recv,
+void discord::voice_state_listener::handle(discord::gateway &, gtw_op_recv,
                                                 const nlohmann::json &data, const std::string &type)
 {
     if (type == "VOICE_STATE_UPDATE") {
@@ -29,7 +27,7 @@ void cmd::discord::voice_state_listener::handle(cmd::discord::gateway &, gtw_op_
     }
 }
 
-void cmd::discord::voice_state_listener::voice_state_update(const nlohmann::json &data)
+void discord::voice_state_listener::voice_state_update(const nlohmann::json &data)
 {
     // We're looking for voice state update for this user_id
     auto user = data["user_id"];
@@ -60,7 +58,7 @@ void cmd::discord::voice_state_listener::voice_state_update(const nlohmann::json
         vg.channel_id = channel.get<std::string>();
 }
 
-void cmd::discord::voice_state_listener::voice_server_update(const nlohmann::json &data)
+void discord::voice_state_listener::voice_server_update(const nlohmann::json &data)
 {
     auto guild = data["guild_id"];
     if (!guild.is_string())
@@ -81,8 +79,8 @@ void cmd::discord::voice_state_listener::voice_server_update(const nlohmann::jso
     vg.endpoint = data.at("endpoint").get<std::string>();
 
     // We got all the information needed to join a voice gateway now
-    vg.gateway = std::make_unique<cmd::discord::voice_gateway>(service, vg, gateway.get_user_id());
-    vg.gateway->connect([&](const boost::system::error_code &e) {
+    vg.gateway = std::make_unique<discord::voice_gateway>(ctx, vg, gateway.get_user_id());
+    vg.gateway->connect(gateway.resolver, [&](const boost::system::error_code &e) {
         if (e) {
             std::cerr << "Voice gateway connection error: " << e.message() << "\n";
         } else {
@@ -92,13 +90,13 @@ void cmd::discord::voice_state_listener::voice_server_update(const nlohmann::jso
     });
 }
 
-void cmd::discord::voice_state_listener::message_create(const nlohmann::json &data)
+void discord::voice_state_listener::message_create(const nlohmann::json &data)
 {
     // If this isn't a guild text, ignore the message
     auto msg_type = data["type"];
     if (!msg_type.is_number())
         return;
-    if (msg_type.get<int>() != static_cast<int>(cmd::discord::channel::channel_type::guild_text))
+    if (msg_type.get<int>() != static_cast<int>(discord::channel::channel_type::guild_text))
         return;
 
     // Otherwise lookup the message contents and check if it is a command to change the voice
@@ -114,7 +112,7 @@ void cmd::discord::voice_state_listener::message_create(const nlohmann::json &da
         check_command(msg_str, data);
 }
 
-void cmd::discord::voice_state_listener::check_command(const std::string &content,
+void discord::voice_state_listener::check_command(const std::string &content,
                                                        const nlohmann::json &json)
 {
     static std::regex command_re{R"(^:(\S+)(?:\s+(.+))?$)"};
@@ -124,7 +122,7 @@ void cmd::discord::voice_state_listener::check_command(const std::string &conten
     if (matcher.empty())
         return;
 
-    std::string command = cmd::string_utils::to_lower(matcher.str(1));
+    std::string command = string_utils::to_lower(matcher.str(1));
     std::string params = matcher.str(2);
 
     // TODO: consider making this a lookup table setup in constructor
@@ -144,7 +142,7 @@ void cmd::discord::voice_state_listener::check_command(const std::string &conten
         do_pause(json);
 }
 
-void cmd::discord::voice_state_listener::do_join(const std::string &params,
+void discord::voice_state_listener::do_join(const std::string &params,
                                                  const nlohmann::json &json)
 {
     auto channel = json["channel_id"];
@@ -163,7 +161,7 @@ void cmd::discord::voice_state_listener::do_join(const std::string &params,
     // Look through the guild's channels for channel <params>, if it exists, join, else fail
     // silently
     for (auto &channel : guild.channels) {
-        if (channel.type == cmd::discord::channel::channel_type::guild_voice &&
+        if (channel.type == discord::channel::channel_type::guild_voice &&
             channel.name == params) {
             // Found a matching voice channel name! Join it if it is different than the currently
             // connected channel (if any)
@@ -175,7 +173,7 @@ void cmd::discord::voice_state_listener::do_join(const std::string &params,
     }
 }
 
-void cmd::discord::voice_state_listener::do_leave(const nlohmann::json &json)
+void discord::voice_state_listener::do_leave(const nlohmann::json &json)
 {
     auto channel = json["channel_id"];
     // Look up what guild this channel is in
@@ -205,11 +203,11 @@ void cmd::discord::voice_state_listener::do_leave(const nlohmann::json &json)
     }
 }
 
-void cmd::discord::voice_state_listener::do_list(const nlohmann::json &)
+void discord::voice_state_listener::do_list(const nlohmann::json &)
 {
 }
 
-void cmd::discord::voice_state_listener::do_add(const std::string &params,
+void discord::voice_state_listener::do_add(const std::string &params,
                                                 const nlohmann::json &json)
 {
     auto channel = json["channel_id"];
@@ -227,7 +225,7 @@ void cmd::discord::voice_state_listener::do_add(const std::string &params,
     }
 }
 
-void cmd::discord::voice_state_listener::do_skip(const nlohmann::json &json)
+void discord::voice_state_listener::do_skip(const nlohmann::json &json)
 {
     auto channel = json["channel_id"];
     std::string guild_id = store.lookup_channel(channel.get<std::string>());
@@ -254,7 +252,7 @@ void cmd::discord::voice_state_listener::do_skip(const nlohmann::json &json)
     }
 }
 
-void cmd::discord::voice_state_listener::do_play(const nlohmann::json &json)
+void discord::voice_state_listener::do_play(const nlohmann::json &json)
 {
     auto channel = json["channel_id"];
     std::string guild_id = store.lookup_channel(channel.get<std::string>());
@@ -266,7 +264,7 @@ void cmd::discord::voice_state_listener::do_play(const nlohmann::json &json)
         return;
 
     if (!it->second.process)
-        it->second.process = std::make_unique<cmd::discord::music_process>(service);
+        it->second.process = std::make_unique<discord::music_process>(ctx);
 
     if (!it->second.music_queue.empty() ||
         it->second.state == voice_gateway_entry::gateway_state::paused) {
@@ -274,7 +272,7 @@ void cmd::discord::voice_state_listener::do_play(const nlohmann::json &json)
     }
 }
 
-void cmd::discord::voice_state_listener::do_pause(const nlohmann::json &json) {
+void discord::voice_state_listener::do_pause(const nlohmann::json &json) {
     auto channel = json["channel_id"];
     std::string guild_id = store.lookup_channel(channel.get<std::string>());
     if (guild_id.empty())
@@ -290,7 +288,7 @@ void cmd::discord::voice_state_listener::do_pause(const nlohmann::json &json) {
 
 // Join and leave can't be refactored because the nlohmann::json converts char*s
 // into strings before serializing the json, I guess. Doesn't like using nullptrs with char*
-void cmd::discord::voice_state_listener::join_voice_server(const std::string &guild_id,
+void discord::voice_state_listener::join_voice_server(const std::string &guild_id,
                                                            const std::string &channel_id)
 {
     nlohmann::json json{{"op", static_cast<int>(gtw_op_send::voice_state_update)},
@@ -308,7 +306,7 @@ void cmd::discord::voice_state_listener::join_voice_server(const std::string &gu
     });
 }
 
-void cmd::discord::voice_state_listener::leave_voice_server(const std::string &guild_id)
+void discord::voice_state_listener::leave_voice_server(const std::string &guild_id)
 {
     nlohmann::json json{{"op", static_cast<int>(gtw_op_send::voice_state_update)},
                         {"d",
@@ -325,7 +323,7 @@ void cmd::discord::voice_state_listener::leave_voice_server(const std::string &g
     });
 }
 
-void cmd::discord::voice_state_listener::play(voice_gateway_entry &entry) 
+void discord::voice_state_listener::play(voice_gateway_entry &entry) 
 {
     if (entry.state == voice_gateway_entry::gateway_state::connected) {
         make_audio_process(entry);
@@ -340,7 +338,7 @@ void cmd::discord::voice_state_listener::play(voice_gateway_entry &entry)
 }
 
 
-void cmd::discord::voice_state_listener::make_audio_process(voice_gateway_entry &entry)
+void discord::voice_state_listener::make_audio_process(voice_gateway_entry &entry)
 {
     // Take song off music queue and create new youtube_dl and ffmpeg process for music
     if (entry.music_queue.empty())
@@ -369,7 +367,7 @@ void cmd::discord::voice_state_listener::make_audio_process(voice_gateway_entry 
                             });
 }
 
-void cmd::discord::voice_state_listener::read_from_pipe(const boost::system::error_code &e,
+void discord::voice_state_listener::read_from_pipe(const boost::system::error_code &e,
                                                         size_t transferred,
                                                         voice_gateway_entry &entry)
 {
@@ -407,7 +405,7 @@ void cmd::discord::voice_state_listener::read_from_pipe(const boost::system::err
     }
 }
 
-void cmd::discord::voice_state_listener::encode_audio(voice_gateway_entry &entry)
+void discord::voice_state_listener::encode_audio(voice_gateway_entry &entry)
 {
     std::lock_guard<std::mutex>(entry.process->mutex);
 
@@ -439,7 +437,7 @@ void cmd::discord::voice_state_listener::encode_audio(voice_gateway_entry &entry
     }
 }
 
-void cmd::discord::voice_state_listener::send_audio(voice_gateway_entry &entry)
+void discord::voice_state_listener::send_audio(voice_gateway_entry &entry)
 {
     if (!entry.process->frames.empty()) {
         if (entry.state == voice_gateway_entry::gateway_state::playing) {
@@ -473,7 +471,7 @@ void cmd::discord::voice_state_listener::send_audio(voice_gateway_entry &entry)
     }
 }
 
-void cmd::discord::music_process::close_pipes()
+void discord::music_process::close_pipes()
 {
     if (audio_transport.is_open()) {
         std::cout << "Closing audio transport\n";
@@ -485,22 +483,22 @@ void cmd::discord::music_process::close_pipes()
     }
 }
 
-void cmd::discord::music_process::new_pipes()
+void discord::music_process::new_pipes()
 {
     close_pipes();
     audio_transport = boost::process::pipe{};
     std::cout << "Assigned new audio transport pipe\n";
-    pcm_source = boost::process::async_pipe{service};
+    pcm_source = boost::process::async_pipe{ctx};
     std::cout << "Assigned new pcm source\n";
 }
 
-void cmd::discord::music_process::kill()
+void discord::music_process::kill()
 {
     youtube_dl.terminate();
     ffmpeg.terminate();
 }
 
-void cmd::discord::music_process::wait()
+void discord::music_process::wait()
 {
     youtube_dl.wait();
     ffmpeg.wait();

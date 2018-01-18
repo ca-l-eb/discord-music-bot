@@ -9,18 +9,15 @@
 #include <json.hpp>
 #include <opcodes.h>
 
-namespace cmd
-{
 namespace discord
 {
 class gateway;
 
 struct event_listener {
     using ptr = std::shared_ptr<event_listener>;
-    virtual void handle(cmd::discord::gateway &gateway, gtw_op_recv, const nlohmann::json &,
+    virtual void handle(discord::gateway &gateway, gtw_op_recv, const nlohmann::json &,
                         const std::string &) = 0;
 };
-}
 }
 
 #endif

@@ -5,8 +5,6 @@
 
 #include <net/http_request.h>
 
-namespace cmd
-{
 namespace discord
 {
 enum class api_limit_param { channel_id, guild_id, webhook_id, global };
@@ -37,11 +35,10 @@ private:
     std::map<api_limit_param, rate_limit> limits;
     clock::time_point last_msg_sent;
 
-    //    void set_common_headers(cmd::http_request &request, bool requires_auth);
-    //    api_response check_success(cmd::http_request &request, int code, api_limit_param param);
-    //    api_result check_rate_limits(cmd::http_response &response, api_limit_param param);
+    //    void set_common_headers(http_request &request, bool requires_auth);
+    //    api_response check_success(http_request &request, int code, api_limit_param param);
+    //    api_result check_rate_limits(http_response &response, api_limit_param param);
 };
-}
 }
 
 #endif

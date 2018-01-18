@@ -5,16 +5,12 @@
 #include <iostream>
 #include <vector>
 #include <cstdint>
-#include <boost/asio/io_service.hpp>
-#include <boost/asio/ip/udp.hpp>
-#include <boost/asio/deadline_timer.hpp>
+#include <boost/asio.hpp>
 
 #include <delayed_message_sender.h>
 #include <heartbeater.h>
 #include <net/websocket.h>
 
-namespace cmd
-{
 namespace discord
 {
 struct voice_gateway_entry;
@@ -95,21 +91,21 @@ public:
 
     using connect_callback = std::function<void(const boost::system::error_code &)>;
 
-    voice_gateway(boost::asio::io_service &service, cmd::discord::voice_gateway_entry &e,
+    voice_gateway(boost::asio::io_context &ctx, discord::voice_gateway_entry &e,
                   std::string user_id);
     ~voice_gateway();
 
     void heartbeat() override;
-    void send(const std::string &s, cmd::websocket::message_sent_callback c);
-    void connect(connect_callback c);
+    void send(const std::string &s, message_sent_callback c);
+    void connect(boost::asio::ip::tcp::resolver &resolver, connect_callback c);
     void play(const uint8_t *opus_encoded, size_t encoded_len, size_t frame_size);
     void stop();
 
 private:
-    boost::asio::io_service &service;
-    cmd::websocket websocket;
-    cmd::discord::delayed_message_sender sender;
-    cmd::discord::voice_gateway_entry &entry;
+    boost::asio::io_context &ctx;
+    websocket websock;
+    discord::delayed_message_sender sender;
+    discord::voice_gateway_entry &entry;
     boost::asio::ip::udp::socket socket;
     boost::asio::ip::udp::endpoint send_endpoint, receive_endpoint;
     boost::asio::ip::udp::resolver resolver;
@@ -132,8 +128,8 @@ private:
 
     connect_callback callback;
     
-    void start_speaking(cmd::websocket::message_sent_callback c);
-    void stop_speaking(cmd::websocket::message_sent_callback c);
+    void start_speaking(message_sent_callback c);
+    void stop_speaking(message_sent_callback c);
     void send_audio(const uint8_t *opus_encoded, size_t encoded_len, size_t frame_size);
     void identify();
     void resume();
@@ -147,7 +143,7 @@ private:
     void select(uint16_t local_udp_port);
     void write_header(unsigned char *buffer, uint16_t seq_num, uint32_t timestamp);
 
-    cmd::websocket::message_sent_callback print_info = [](const boost::system::error_code &e,
+    message_sent_callback print_info = [](const boost::system::error_code &e,
                                                           size_t transferred) {
         if (e) {
             std::cerr << "Voice gateway send error: " << e.message() << "\n";
@@ -157,14 +153,13 @@ private:
     };
 };
 }
-}
 
 template<>
-struct std::is_error_code_enum<cmd::discord::voice_gateway::error> : public std::true_type {
+struct std::is_error_code_enum<discord::voice_gateway::error> : public std::true_type {
 };
 
 template<>
-struct boost::system::is_error_code_enum<cmd::discord::voice_gateway::error> : public boost::true_type {
+struct boost::system::is_error_code_enum<discord::voice_gateway::error> : public boost::true_type {
 };
 
 

@@ -3,19 +3,16 @@
 
 #include <events/event_listener.h>
 
-namespace cmd
-{
 namespace discord
 {
 struct hello_responder : public event_listener {
-    explicit hello_responder(cmd::discord::api &api);
-    void handle(cmd::discord::gateway &, gtw_op_recv, const nlohmann::json &json,
+    explicit hello_responder(discord::api &api);
+    void handle(discord::gateway &, gtw_op_recv, const nlohmann::json &json,
                 const std::string &type) override;
 
 private:
-    cmd::discord::api *api;
+    discord::api &api;
 };
-}
 }
 
 #endif

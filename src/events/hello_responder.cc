@@ -2,9 +2,9 @@
 
 #include <events/hello_responder.h>
 
-cmd::discord::hello_responder::hello_responder(cmd::discord::api &api) : api{&api} {}
+discord::hello_responder::hello_responder(discord::api &api) : api{api} {}
 
-void cmd::discord::hello_responder::handle(cmd::discord::gateway &, gtw_op_recv,
+void discord::hello_responder::handle(discord::gateway &, gtw_op_recv,
                                            const nlohmann::json &json, const std::string &type)
 {
     if (json.is_null())

@@ -8,8 +8,6 @@
 #include <discord/channel.h>
 #include <discord/member.h>
 
-namespace cmd
-{
 namespace discord
 {
 struct guild {
@@ -23,10 +21,8 @@ struct guild {
 };
 
 bool operator<(const guild &lhs, const guild &rhs);
-void to_json(nlohmann::json &json, const cmd::discord::guild &g);
-void from_json(const nlohmann::json &json, cmd::discord::guild &g);
-
-}
+void to_json(nlohmann::json &json, const discord::guild &g);
+void from_json(const nlohmann::json &json, discord::guild &g);
 }
 
 #endif

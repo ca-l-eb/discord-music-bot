@@ -1,8 +1,6 @@
 #ifndef CMD_DISCORD_OPCODES_H
 #define CMD_DISCORD_OPCODES_H
 
-namespace cmd
-{
 namespace discord
 {
 enum class gtw_op_recv {
@@ -42,5 +40,5 @@ enum class gtw_voice_op_recv {
     client_disconnect = 13
 };
 }
-}
+
 #endif

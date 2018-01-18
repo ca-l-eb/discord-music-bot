@@ -27,7 +27,7 @@ TEST(Guild, GuildFromJson)
         nlohmann::json json = nlohmann::json::parse(str);
         if (json.is_null())
             FAIL();
-        cmd::discord::guild guild = json["d"];
+        discord::guild guild = json["d"];
         ASSERT_EQ("147536581748588544", guild.owner);
         ASSERT_EQ("Super Fun Time", guild.name);
         ASSERT_EQ(39, guild.members.size());
@@ -53,7 +53,7 @@ TEST(GatewayStore, LoadStore)
         if (json1.is_null() || json2.is_null())
             FAIL();
         
-        cmd::discord::gateway_store store;
+        discord::gateway_store store;
         store.parse_guild(json1["d"]);
         store.parse_guild(json2["d"]);
         

@@ -2,12 +2,8 @@
 #define CMD_DISCORD_VOICE_STATE_LISTENER_H
 
 #include <array>
-#include <boost/asio/io_service.hpp>
-#include <boost/asio/deadline_timer.hpp>
-#include <boost/asio/streambuf.hpp>
-#include <boost/process/child.hpp>
-#include <boost/process/pipe.hpp>
-#include <boost/process/async_pipe.hpp>
+#include <boost/asio.hpp>
+#include <boost/process.hpp>
 #include <deque>
 #include <memory>
 
@@ -15,8 +11,6 @@
 #include <gateway.h>
 #include <voice/opus_encoder.h>
 
-namespace cmd
-{
 namespace discord
 {
 class voice_gateway;
@@ -33,7 +27,7 @@ struct music_frame {
 };
 
 struct music_process {
-    boost::asio::io_service &service;
+    boost::asio::io_context &ctx;
     boost::process::child youtube_dl;
     boost::process::child ffmpeg;
     boost::process::pipe audio_transport;
@@ -42,11 +36,11 @@ struct music_process {
     boost::asio::streambuf buffer;
     std::deque<music_frame> frames;
     std::mutex mutex;
-    cmd::discord::opus_encoder encoder{2, 48000};
+    discord::opus_encoder encoder{2, 48000};
     music_frame current_frame;
 
-    music_process(boost::asio::io_service &service)
-        : service{service}, pcm_source{service}, timer{service}
+    music_process(boost::asio::io_context &ctx)
+        : ctx{ctx}, pcm_source{ctx}, timer{ctx}
     {
     }
     void close_pipes();
@@ -61,7 +55,7 @@ struct voice_gateway_entry {
     std::string session_id;
     std::string token;
     std::string endpoint;
-    std::unique_ptr<cmd::discord::voice_gateway> gateway;
+    std::unique_ptr<discord::voice_gateway> gateway;
     enum class gateway_state { disconnected, connected, playing, paused } state;
     std::deque<std::string> music_queue;
     std::unique_ptr<music_process> process;
@@ -70,15 +64,16 @@ struct voice_gateway_entry {
 class voice_state_listener : public event_listener
 {
 public:
-    voice_state_listener(boost::asio::io_service &service, cmd::discord::gateway &gateway, cmd::discord::gateway_store &store);
+    voice_state_listener(boost::asio::io_context &ctx, discord::gateway &gateway,
+                         discord::gateway_store &store);
     ~voice_state_listener();
-    void handle(cmd::discord::gateway &gateway, gtw_op_recv, const nlohmann::json &json,
+    void handle(discord::gateway &gateway, gtw_op_recv, const nlohmann::json &json,
                 const std::string &type) override;
 
 private:
-    boost::asio::io_service &service;
-    cmd::discord::gateway &gateway;
-    cmd::discord::gateway_store &store;
+    boost::asio::io_context &ctx;
+    discord::gateway &gateway;
+    discord::gateway_store &store;
 
     // Map guild_id to voice_gateway_entry (since 1 voice connection per guild)
     std::map<std::string, voice_gateway_entry> voice_gateways;
@@ -105,7 +100,6 @@ private:
     void send_audio(voice_gateway_entry &entry);
     void encode_audio(voice_gateway_entry &entry);
 };
-}
 }
 
 #endif

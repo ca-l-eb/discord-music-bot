@@ -1,11 +1,11 @@
 #include <discord/guild.h>
 
-bool cmd::discord::operator<(const cmd::discord::guild &lhs, const cmd::discord::guild &rhs)
+bool discord::operator<(const discord::guild &lhs, const discord::guild &rhs)
 {
     return lhs.id < rhs.id;
 }
 
-void cmd::discord::to_json(nlohmann::json &json, const cmd::discord::guild &g)
+void discord::to_json(nlohmann::json &json, const discord::guild &g)
 {
     json = {{"owner", g.owner},
             {"name", g.name},
@@ -16,13 +16,13 @@ void cmd::discord::to_json(nlohmann::json &json, const cmd::discord::guild &g)
             {"unavailable", g.unavailable}};
 }
 
-void cmd::discord::from_json(const nlohmann::json &json, cmd::discord::guild &g)
+void discord::from_json(const nlohmann::json &json, discord::guild &g)
 {
-    g.members = json.at("members").get<std::set<cmd::discord::member>>();
+    g.members = json.at("members").get<std::set<discord::member>>();
     g.owner = json.at("owner_id").get<std::string>();
     g.name = json.at("name").get<std::string>();
     g.id = json.at("id").get<std::string>();
     g.region = json.at("region").get<std::string>();
     g.unavailable = json.at("unavailable").get<bool>();
-    g.channels = json.at("channels").get<std::set<cmd::discord::channel>>();
+    g.channels = json.at("channels").get<std::set<discord::channel>>();
 }

@@ -1,21 +1,19 @@
-#include <boost/asio/placeholders.hpp>
-#include <boost/bind.hpp>
 #include <iostream>
 
 #include <gateway.h>
 #include <heartbeater.h>
 
-cmd::discord::heartbeater::heartbeater(boost::asio::io_service &service, cmd::discord::beatable &b)
-    : b{b}, timer{service}, heartbeat_interval{0}, acked{true}
+discord::heartbeater::heartbeater(boost::asio::io_context &ctx, discord::beatable &b)
+    : b{b}, timer{ctx}, heartbeat_interval{0}, acked{true}
 {
 }
 
-cmd::discord::heartbeater::~heartbeater()
+discord::heartbeater::~heartbeater()
 {
     timer.cancel();
 }
 
-void cmd::discord::heartbeater::on_hello(const nlohmann::json &data)
+void discord::heartbeater::on_hello(const nlohmann::json &data)
 {
     if (!data.is_null()) {
         if (data["heartbeat_interval"].is_number()) {
@@ -28,24 +26,24 @@ void cmd::discord::heartbeater::on_hello(const nlohmann::json &data)
     }
 }
 
-void cmd::discord::heartbeater::on_heartbeat_ack()
+void discord::heartbeater::on_heartbeat_ack()
 {
     acked = true;
 }
 
-void cmd::discord::heartbeater::cancel()
+void discord::heartbeater::cancel()
 {
     timer.cancel();
 }
 
-void cmd::discord::heartbeater::start_heartbeat_timer()
+void discord::heartbeater::start_heartbeat_timer()
 {
     timer.expires_from_now(boost::posix_time::milliseconds(heartbeat_interval));
-    timer.async_wait(
-        boost::bind(&heartbeater::on_timer_fire, this, boost::asio::placeholders::error));
+    auto callback = [=](auto &ec) { on_timer_fire(ec); };
+    timer.async_wait(callback);
 }
 
-void cmd::discord::heartbeater::on_timer_fire(const boost::system::error_code &e)
+void discord::heartbeater::on_timer_fire(const boost::system::error_code &e)
 {
     if (e || heartbeat_interval < 0) {
         // Timer was cancelled, dont fire the heartbeat

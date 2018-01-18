@@ -1,11 +1,11 @@
 #include <discord/channel.h>
 
-bool cmd::discord::operator<(const channel &lhs, const channel &rhs)
+bool discord::operator<(const channel &lhs, const channel &rhs)
 {
     return lhs.id < rhs.id;
 }
 
-void cmd::discord::to_json(nlohmann::json &json, const channel &c)
+void discord::to_json(nlohmann::json &json, const channel &c)
 {
     json = {{"name", c.name},
             {"id", c.id},
@@ -14,11 +14,11 @@ void cmd::discord::to_json(nlohmann::json &json, const channel &c)
             {"bitrate", c.bitrate}};
 }
 
-void cmd::discord::from_json(const nlohmann::json &json, channel &c)
+void discord::from_json(const nlohmann::json &json, channel &c)
 {
     c.name = json.at("name").get<std::string>();
     c.id = json.at("id").get<std::string>();
-    c.type = json.at("type").get<cmd::discord::channel::channel_type>();
+    c.type = json.at("type").get<discord::channel::channel_type>();
 
     auto user_limit = json.find("user_limit");
     if (user_limit != json.end())

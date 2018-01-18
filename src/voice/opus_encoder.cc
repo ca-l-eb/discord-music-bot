@@ -2,7 +2,7 @@
 
 #include <voice/opus_encoder.h>
 
-cmd::discord::opus_encoder::opus_encoder(int channels, int sample_rate)
+discord::opus_encoder::opus_encoder(int channels, int sample_rate)
 {
     int error = 0;
     encoder = opus_encoder_create(sample_rate, channels, OPUS_APPLICATION_AUDIO, &error);
@@ -13,19 +13,19 @@ cmd::discord::opus_encoder::opus_encoder(int channels, int sample_rate)
     opus_encoder_ctl(encoder, OPUS_SET_SIGNAL(OPUS_SIGNAL_MUSIC));
 }
 
-cmd::discord::opus_encoder::~opus_encoder()
+discord::opus_encoder::~opus_encoder()
 {
     if (encoder)
         opus_encoder_destroy(encoder);
 }
 
-int32_t cmd::discord::opus_encoder::encode(const int16_t *src, int frame_size, unsigned char *dest,
+int32_t discord::opus_encoder::encode(const int16_t *src, int frame_size, unsigned char *dest,
                                            int dest_size)
 {
     return opus_encode(encoder, src, frame_size, dest, dest_size);
 }
 
-int32_t cmd::discord::opus_encoder::encode_float(const float *src, int frame_size,
+int32_t discord::opus_encoder::encode_float(const float *src, int frame_size,
                                                  unsigned char *dest, int dest_size)
 {
     return opus_encode_float(encoder, src, frame_size, dest, dest_size);

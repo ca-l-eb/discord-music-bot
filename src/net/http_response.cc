@@ -1,6 +1,5 @@
 #include <algorithm>
-#include <boost/asio/buffers_iterator.hpp>
-#include <boost/bind.hpp>
+#include <boost/asio.hpp>
 #include <regex>
 
 #include <net/http_response.h>
@@ -132,7 +131,7 @@ void http_response::add_header_to_map(const std::string &line)
     std::smatch matcher;
     std::regex_search(line, matcher, re);
     if (!matcher.empty()) {
-        std::string first = cmd::string_utils::to_lower(matcher.str(1));
+        std::string first = string_utils::to_lower(matcher.str(1));
         auto pair = std::pair<std::string, std::string>(first, matcher.str(2));
         headers_map.insert(pair);
     }

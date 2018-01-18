@@ -25,6 +25,7 @@ set(SOURCE_FILES
         src/net/http_request.cc
         src/net/http_response.cc
         src/net/resource_parser.cc
+        src/net/send_queue.cc
         src/net/websocket.cc
         src/voice/crypto.cc
         src/voice/opus_encoder.cc
@@ -49,6 +50,7 @@ set(HEADER_FILES
         src/net/http_request.h
         src/net/http_response.h
         src/net/resource_parser.h
+        src/net/send_queue.h
         src/net/websocket.h
         src/opcodes.h
         src/string_utils.h

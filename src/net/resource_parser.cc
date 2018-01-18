@@ -2,7 +2,7 @@
 
 #include <net/resource_parser.h>
 
-std::tuple<std::string, std::string, int, std::string> cmd::resource_parser::parse(
+resource_parser::parsed_url resource_parser::parse(
     const std::string &url)
 {
     static std::regex re{

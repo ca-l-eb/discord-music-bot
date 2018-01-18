@@ -5,7 +5,7 @@
 #include <json.hpp>
 
 /*
-cmd::discord::api::api(const std::string &token) : token{token}
+discord::api::api(const std::string &token) : token{token}
 {
     // Guess that the global limit is around 20
     limits[api_limit_param::global] = {20, 20, 0};
@@ -14,7 +14,7 @@ cmd::discord::api::api(const std::string &token) : token{token}
     limits[api_limit_param::webhook_id] = {5, 5, 0};
 }
 
-cmd::discord::api_result cmd::discord::api::send_message(const std::string &channel_id,
+discord::api_result discord::api::send_message(const std::string &channel_id,
                                                          const std::string &message)
 {
     http_request request{api_base + "/channels/" + channel_id + "/messages"};
@@ -25,7 +25,7 @@ cmd::discord::api_result cmd::discord::api::send_message(const std::string &chan
     return check_success(request, 200, api_limit_param::channel_id).result;
 }
 
-void cmd::discord::api::set_common_headers(cmd::http_request &request, bool requires_auth)
+void discord::api::set_common_headers(http_request &request, bool requires_auth)
 {
     if (requires_auth)
         request.set_header("Authorization", "Bot " + token);
@@ -33,7 +33,7 @@ void cmd::discord::api::set_common_headers(cmd::http_request &request, bool requ
     request.set_header("User-Agent", "TestBot (https://alucard.io, v0.1)");
 }
 
-cmd::discord::api_response cmd::discord::api::check_success(cmd::http_request &request, int code,
+discord::api_response discord::api::check_success(http_request &request, int code,
                                                             api_limit_param param)
 {
     std::lock_guard<std::mutex> guard(mutex);
@@ -86,11 +86,11 @@ cmd::discord::api_response cmd::discord::api::check_success(cmd::http_request &r
             return {api_result::success, response};
         return {api_result::failure, response};
     } catch (std::exception &e) {
-//        cmd::http_pool::mark_closed("discordapp.com", 443);
+//        http_pool::mark_closed("discordapp.com", 443);
     }
 }
 
-cmd::discord::api_result cmd::discord::api::check_rate_limits(cmd::http_response &response,
+discord::api_result discord::api::check_rate_limits(http_response &response,
                                                               api_limit_param param)
 {
     auto &headers = response.headers();
@@ -158,7 +158,7 @@ cmd::discord::api_result cmd::discord::api::check_rate_limits(cmd::http_response
     return api_result::success;
 }
 
-std::string cmd::discord::api::get_gateway()
+std::string discord::api::get_gateway()
 {
     http_request request{api_base + "/gateway/bot"};
     set_common_headers(request, false);

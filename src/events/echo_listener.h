@@ -3,15 +3,12 @@
 
 #include <events/event_listener.h>
 
-namespace cmd
-{
 namespace discord
 {
 struct echo_listener : public event_listener {
-    void handle(cmd::discord::gateway &, gtw_op_recv, const nlohmann::json &json,
+    void handle(discord::gateway &, gtw_op_recv, const nlohmann::json &json,
                 const std::string &type) override;
 };
-}
 }
 
 #endif
