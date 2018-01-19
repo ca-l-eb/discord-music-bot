@@ -32,7 +32,7 @@ websocket::~websocket()
 
 void websocket::async_connect(const std::string &host, const std::string &service,
                               const std::string &resource, boost::asio::ip::tcp::resolver &resolver,
-                              message_sent_callback c)
+                              error_cb c)
 {
     this->host = host;
     this->resource = resource;
@@ -46,7 +46,7 @@ void websocket::async_connect(const std::string &host, const std::string &servic
 }
 
 void websocket::async_connect(const std::string &url, boost::asio::ip::tcp::resolver &resolver,
-                              message_sent_callback c)
+                              error_cb c)
 {
     auto parsed = resource_parser::parse(url);
     int port = parsed.port;
@@ -147,7 +147,7 @@ void websocket::on_upgrade_sent(const boost::system::error_code &ec)
 {
     if (ec) {
         std::cerr << "Error sending upgrade: " << ec.message() << "\n";
-        io.post([=]() { connect_callback(ec, 0); });
+        io.post([=]() { connect_callback(ec); });
         return;
     }
     auto mutable_buffer = buffer.prepare(4096);
@@ -163,7 +163,7 @@ void websocket::on_upgrade_receive(const boost::system::error_code &ec, size_t t
 {
     if (ec) {
         std::cerr << "Error reading websocket upgrade reponse: " << ec.message() << "\n";
-        io.post([=]() { connect_callback(ec, 0); });
+        io.post([=]() { connect_callback(ec); });
         return;
     }
 
@@ -184,7 +184,7 @@ void websocket::check_upgrade()
 {
     if (response.status_code() != 101) {
         // No version renegotiation. We only support WebSocket v13
-        auto callback = [=]() { connect_callback(error::upgrade_failed, 0); };
+        auto callback = [=]() { connect_callback(error::upgrade_failed); };
         io.post(callback);
         return;
     }
@@ -192,12 +192,12 @@ void websocket::check_upgrade()
     auto &headers_map = response.headers();
     auto it = headers_map.find("sec-websocket-accept");
     if (it == headers_map.end()) {
-        io.post([=]() { connect_callback(error::no_upgrade_key, 0); });
+        io.post([=]() { connect_callback(error::no_upgrade_key); });
     } else if (it->second != expected_accept) {
-        io.post([=]() { connect_callback(error::bad_upgrade_key, 0); });
+        io.post([=]() { connect_callback(error::bad_upgrade_key); });
     } else {
         // Successfully connected and upgraded connection to websocket
-        io.post([=]() { connect_callback({}, 0); });
+        io.post([=]() { connect_callback({}); });
     }
 }
 
@@ -220,24 +220,24 @@ void websocket::close(websocket::status_code code)
     build_frame_and_send_async(buf, sizeof(buf), opcode::close, callback);
 }
 
-void websocket::async_send(const std::string &str, message_sent_callback c)
+void websocket::async_send(const std::string &str, transfer_cb c)
 {
     build_frame_and_send_async(str.c_str(), str.size(), opcode::text, c);
 }
 
-void websocket::async_send(const void *buffer, size_t size, message_sent_callback c)
+void websocket::async_send(const void *buffer, size_t size, transfer_cb c)
 {
     build_frame_and_send_async(buffer, size, opcode::text, c);
 }
 
 void websocket::build_frame_and_send_async(const void *data, size_t len, websocket::opcode op,
-                                           message_sent_callback c)
+                                           transfer_cb c)
 {
     auto frame = build_frame(reinterpret_cast<const uint8_t *>(data), len, op);
     queue->enqueue_message(frame, c);
 }
 
-void websocket::async_next_message(message_received_callback c)
+void websocket::async_next_message(data_cb c)
 {
     // If the connection has been closed, notify the caller immediately
     if (close_status) {
@@ -278,7 +278,7 @@ void websocket::check_parser_state()
     }
 }
 
-void websocket::enqueue_read(size_t amount, message_sent_callback c)
+void websocket::enqueue_read(size_t amount, transfer_cb c)
 {
     auto mutable_buf = buffer.prepare(amount);
     if (secure_connection) {

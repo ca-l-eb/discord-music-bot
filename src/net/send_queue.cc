@@ -6,7 +6,7 @@ send_queue::send_queue(boost::asio::ssl::stream<boost::asio::ip::tcp::socket> &s
 {
 }
 
-void send_queue::enqueue_message(std::vector<uint8_t> v, message_sent_callback c)
+void send_queue::enqueue_message(std::vector<uint8_t> v, transfer_cb c)
 {
     auto callback = [=]() {
         bool write_in_progess = !write_queue.empty();

@@ -8,6 +8,7 @@
 #include <thread>
 
 #include <api.h>
+#include <callbacks.h>
 #include <delayed_message_sender.h>
 #include <events/event_listener.h>
 #include <gateway_store.h>
@@ -49,7 +50,7 @@ public:
                       event_listener::ptr h);
     void remove_listener(const std::string &event_name, const std::string &handler_name);
     void heartbeat() override;
-    void send(const std::string &s, message_sent_callback c);
+    void send(const std::string &s, transfer_cb c);
     const std::string &get_user_id() const;
     const std::string &get_session_id() const;
 
@@ -80,13 +81,12 @@ private:
     void run_gateway_dispatch(nlohmann::json &data, const std::string &event_name);
     void identify();
     void resume();
-    void on_connect(const boost::system::error_code &e, size_t);
+    void on_connect(const boost::system::error_code &e);
     void on_ready(nlohmann::json &data);
     void event_loop();
 
-    message_sent_callback ignore_send = [](const boost::system::error_code &, size_t) {};
-    message_sent_callback print_info_send = [](const boost::system::error_code &e,
-                                               size_t transferred) {
+    transfer_cb ignore_send = [](const boost::system::error_code &, size_t) {};
+    transfer_cb print_info_send = [](const boost::system::error_code &e, size_t transferred) {
         if (e) {
             std::cerr << "Message send error: " << e.message() << "\n";
         } else {

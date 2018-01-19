@@ -6,11 +6,8 @@
 #include <cstdint>
 #include <string>
 
+#include <callbacks.h>
 #include <net/http_response.h>
-
-using message_received_callback =
-    std::function<void(const boost::system::error_code &, const uint8_t *, size_t)>;
-using message_sent_callback = std::function<void(const boost::system::error_code &, size_t)>;
 
 class send_queue;
 
@@ -92,12 +89,12 @@ public:
     ~websocket();
     void async_connect(const std::string &host, const std::string &service,
                        const std::string &resource, boost::asio::ip::tcp::resolver &resolver,
-                       message_sent_callback c);
+                       error_cb c);
     void async_connect(const std::string &url, boost::asio::ip::tcp::resolver &resolver,
-                       message_sent_callback c);
-    void async_send(const std::string &str, message_sent_callback c);
-    void async_send(const void *buffer, size_t len, message_sent_callback c);
-    void async_next_message(message_received_callback c);
+                       error_cb c);
+    void async_send(const std::string &str, transfer_cb c);
+    void async_send(const void *buffer, size_t len, transfer_cb c);
+    void async_next_message(data_cb c);
 
     void close(websocket::status_code = websocket::status_code::normal);
     uint16_t close_code();
@@ -116,8 +113,8 @@ private:
     std::string expected_accept;
 
     uint16_t close_status;
-    message_received_callback sender_callback;
-    message_sent_callback connect_callback;
+    data_cb sender_callback;
+    error_cb connect_callback;
 
     void on_resolve(const boost::system::error_code &ec,
                     boost::asio::ip::tcp::resolver::iterator it);
@@ -132,10 +129,10 @@ private:
     void do_handshake();
 
     void build_frame_and_send_async(const void *data, size_t len, websocket::opcode op,
-                                    message_sent_callback);
+                                    transfer_cb);
     void check_parser_state();
 
-    void enqueue_read(size_t amount, message_sent_callback c);
+    void enqueue_read(size_t amount, transfer_cb c);
     void handle_frame();
 
     void pong(const uint8_t *msg, size_t len);

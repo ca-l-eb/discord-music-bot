@@ -11,14 +11,14 @@ discord::delayed_message_sender::delayed_message_sender(boost::asio::io_context 
     send_timer.expires_from_now(boost::posix_time::milliseconds(0));
 }
 
-void discord::delayed_message_sender::safe_send(const std::string &s, message_sent_callback c)
+void discord::delayed_message_sender::safe_send(const std::string &s, transfer_cb c)
 {
-    auto callback = [=]() { queue_message(s, c); };
+    auto callback = [=]() { enqueue_message(s, c); };
     ctx.post(boost::asio::bind_executor(timer_strand, callback));
 }
 
 // This idea is from CppCon 2016 Talk by Michael Caisse "Asynchronous IO with Boost.Asio"
-void discord::delayed_message_sender::queue_message(std::string s, message_sent_callback c)
+void discord::delayed_message_sender::enqueue_message(std::string s, transfer_cb c)
 {
     bool write_in_progess = !write_queue.empty();
     write_queue.push_back(std::move(s));

@@ -7,6 +7,7 @@
 #include <memory>
 #include <vector>
 
+#include <callbacks.h>
 #include <delayed_message_sender.h>
 #include <heartbeater.h>
 #include <net/websocket.h>
@@ -41,15 +42,13 @@ public:
         static const boost::system::error_category &instance();
     };
 
-    using connect_callback = std::function<void(const boost::system::error_code &)>;
-
     voice_gateway(boost::asio::io_context &ctx, discord::voice_gateway_entry &e,
                   std::string user_id);
     ~voice_gateway();
 
     void heartbeat() override;
-    void send(const std::string &s, message_sent_callback c);
-    void connect(boost::asio::ip::tcp::resolver &resolver, connect_callback c);
+    void send(const std::string &s, transfer_cb c);
+    void connect(boost::asio::ip::tcp::resolver &resolver, error_cb c);
     void play(const uint8_t *opus_encoded, size_t encoded_len, size_t frame_size);
     void stop();
 
@@ -78,15 +77,15 @@ private:
     int retries;
     bool is_speaking;
 
-    connect_callback callback;
+    error_cb callback;
 
-    void start_speaking(message_sent_callback c);
-    void stop_speaking(message_sent_callback c);
+    void start_speaking(transfer_cb c);
+    void stop_speaking(transfer_cb c);
     void send_audio(const uint8_t *opus_encoded, size_t encoded_len, size_t frame_size);
     void identify();
     void resume();
     void event_loop();
-    void on_connect(const boost::system::error_code &e, size_t transferred);
+    void on_connect(const boost::system::error_code &e);
     void extract_ready_info(nlohmann::json &data);
     void extract_session_info(nlohmann::json &data);
     void ip_discovery();
@@ -95,7 +94,7 @@ private:
     void select(uint16_t local_udp_port);
     void write_header(unsigned char *buffer, uint16_t seq_num, uint32_t timestamp);
 
-    message_sent_callback print_info = [](const boost::system::error_code &e, size_t transferred) {
+    transfer_cb print_info = [](const boost::system::error_code &e, size_t transferred) {
         if (e) {
             std::cerr << "Voice gateway send error: " << e.message() << "\n";
         } else {

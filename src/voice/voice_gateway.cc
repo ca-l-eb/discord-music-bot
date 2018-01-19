@@ -38,23 +38,23 @@ discord::voice_gateway::~voice_gateway()
     std::cout << "Voice gateway destructor\n";
 }
 
-void discord::voice_gateway::connect(boost::asio::ip::tcp::resolver &resolver, connect_callback c)
+void discord::voice_gateway::connect(boost::asio::ip::tcp::resolver &resolver, error_cb c)
 {
     callback = c;
     // Make sure we're using voice gateway v3
-    auto connect_callback = [&](const boost::system::error_code &e, size_t transferred) {
+    auto connect_callback = [&](const boost::system::error_code &e) {
         if (e) {
             ctx.post([&]() { callback(e); });
             std::cerr << "WebSocket connect error: " << e.message() << "\n";
         } else {
             std::cout << "WebSocket connected\n";
-            on_connect(e, transferred);
+            on_connect(e);
         }
     };
     websock.async_connect("wss://" + entry.endpoint + "/?v=3", resolver, connect_callback);
 }
 
-void discord::voice_gateway::on_connect(const boost::system::error_code &e, size_t)
+void discord::voice_gateway::on_connect(const boost::system::error_code &e)
 {
     if (e) {
         ctx.post([&]() { callback(e); });
@@ -84,7 +84,7 @@ void discord::voice_gateway::identify()
     });
 }
 
-void discord::voice_gateway::send(const std::string &s, message_sent_callback c)
+void discord::voice_gateway::send(const std::string &s, transfer_cb c)
 {
     sender.safe_send(s, c);
 }
@@ -315,7 +315,7 @@ void discord::voice_gateway::notify_heartbeater_hello(nlohmann::json &data)
     }
 }
 
-void discord::voice_gateway::start_speaking(message_sent_callback c)
+void discord::voice_gateway::start_speaking(transfer_cb c)
 {
     // Apparently this _doesnt_ need the ssrc
     nlohmann::json speaking_payload{{"op", static_cast<int>(gtw_voice_op_send::speaking)},
@@ -323,7 +323,7 @@ void discord::voice_gateway::start_speaking(message_sent_callback c)
     send(speaking_payload.dump(), c);
 }
 
-void discord::voice_gateway::stop_speaking(message_sent_callback c)
+void discord::voice_gateway::stop_speaking(transfer_cb c)
 {
     nlohmann::json speaking_payload{{"op", static_cast<int>(gtw_voice_op_send::speaking)},
                                     {"d", {{"speaking", false}, {"delay", 0}}}};

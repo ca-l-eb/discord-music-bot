@@ -27,12 +27,12 @@ discord::gateway::gateway(boost::asio::io_context &ctx, const std::string &token
 
     // Establish the WebSocket connection
     websock.async_connect("wss://gateway.discord.gg/?v=6&encoding=json", resolver,
-                          [&](auto &ec, auto transferred) { on_connect(ec, transferred); });
+                          [&](auto &ec) { on_connect(ec); });
 }
 
 discord::gateway::~gateway() {}
 
-void discord::gateway::on_connect(const boost::system::error_code &e, size_t)
+void discord::gateway::on_connect(const boost::system::error_code &e)
 {
     if (e) {
         throw std::runtime_error("Could not connect: " + e.message());
@@ -60,7 +60,7 @@ void discord::gateway::remove_listener(const std::string &event_name,
     }
 }
 
-void discord::gateway::send(const std::string &s, message_sent_callback c)
+void discord::gateway::send(const std::string &s, transfer_cb c)
 {
     sender.safe_send(s, c);
 }
