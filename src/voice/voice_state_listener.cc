@@ -1,4 +1,4 @@
-#include <string_utils.h>
+#include <algorithm>
 #include <boost/process.hpp>
 #include <iostream>
 #include <regex>
@@ -133,7 +133,8 @@ void discord::voice_state_listener::check_command(const std::string &content,
     if (matcher.empty())
         return;
 
-    std::string command = string_utils::to_lower(matcher.str(1));
+    std::string command = matcher.str(1);
+    std::transform(command.begin(), command.end(), command.begin(), ::tolower);
     std::string params = matcher.str(2);
 
     // TODO: consider making this a lookup table setup in constructor
