@@ -2,8 +2,7 @@
 
 #include <net/resource_parser.h>
 
-resource_parser::parsed_url resource_parser::parse(
-    const std::string &url)
+resource_parser::parsed_url resource_parser::parse(const std::string &url)
 {
     static std::regex re{
         R"(^(?:(\S+)://)?([A-Za-z0-9.-]{2,})(?::(\d+))?(/[/A-Za-z0-9-._~:/?#\[\]%@!$&'()*+,;=`]*)?$)"};

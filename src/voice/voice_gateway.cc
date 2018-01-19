@@ -9,9 +9,8 @@
 #include <voice/voice_gateway.h>
 #include <voice/voice_state_listener.h>
 
-discord::voice_gateway::voice_gateway(boost::asio::io_context &ctx,
-                                           discord::voice_gateway_entry &e,
-                                           std::string user_id)
+discord::voice_gateway::voice_gateway(boost::asio::io_context &ctx, discord::voice_gateway_entry &e,
+                                      std::string user_id)
     : ctx{ctx}
     , websock{ctx}
     , sender{ctx, websock, 500}
@@ -39,8 +38,7 @@ discord::voice_gateway::~voice_gateway()
     std::cout << "Voice gateway destructor\n";
 }
 
-void discord::voice_gateway::connect(boost::asio::ip::tcp::resolver &resolver,
-                                          connect_callback c)
+void discord::voice_gateway::connect(boost::asio::ip::tcp::resolver &resolver, connect_callback c)
 {
     callback = c;
     // Make sure we're using voice gateway v3
@@ -59,7 +57,7 @@ void discord::voice_gateway::connect(boost::asio::ip::tcp::resolver &resolver,
 void discord::voice_gateway::on_connect(const boost::system::error_code &e, size_t)
 {
     if (e) {
-        ctx.post([&](){callback(e); }); 
+        ctx.post([&]() { callback(e); });
     } else {
         // Sucessfully connected
         beater = std::make_unique<discord::heartbeater>(ctx, *this);
@@ -86,82 +84,80 @@ void discord::voice_gateway::identify()
     });
 }
 
-void discord::voice_gateway::send(const std::string &s,
-                                       message_sent_callback c)
+void discord::voice_gateway::send(const std::string &s, message_sent_callback c)
 {
     sender.safe_send(s, c);
 }
 
 void discord::voice_gateway::event_loop()
 {
-    websock.async_next_message([&](const boost::system::error_code &e, const uint8_t *data,
-                                     size_t len) {
-        if (e) {
-            if (e == websocket_error::websocket_connection_closed) {
-                auto code = websock.close_code();
-                ctx.post([&]() {
-                    callback(make_error_code(static_cast<voice_gateway::error>(code)));
-                });
-            } else {
-                std::cerr << "voice gateway websocket read error: " << e.message() << "\n";
-                ctx.post([&]() { callback(e); });
-            }
-        }
-        const char *begin = reinterpret_cast<const char *>(data);
-        const char *end = begin + len;
-
-        std::cout << "VOICE GATEWAY: ";
-        std::cout.write(begin, len);
-        std::cout << "\n";
-        // Parse the results as a json object
-        try {
-            nlohmann::json json = nlohmann::json::parse(begin, end);
-
-            auto op = json["op"];
-            auto payload_data = json["d"];
-
-            if (op.is_number()) {
-                auto gateway_op = static_cast<gtw_voice_op_recv>(op.get<int>());
-                switch (gateway_op) {
-                    case gtw_voice_op_recv::ready:
-                        extract_ready_info(payload_data);
-                        break;
-                    case gtw_voice_op_recv::session_description:
-                        extract_session_info(payload_data);
-                        break;
-                    case gtw_voice_op_recv::speaking:
-                        break;
-                    case gtw_voice_op_recv::heartbeat_ack:
-                        // We should check if the nonce is the same as the one sent by the
-                        // heartbeater
-                        beater->on_heartbeat_ack();
-                        break;
-                    case gtw_voice_op_recv::hello:
-                        notify_heartbeater_hello(payload_data);
-                        break;
-                    case gtw_voice_op_recv::resumed:
-                        // Successfully resumed
-                        state = connection_state::connected;
-                        break;
-                    case gtw_voice_op_recv::client_disconnect:
-                        break;
-                }
-            } else {
-                // Discord reference says the hello opcode 8 doesn't contain an 'op' field, so
-                // the above if statement will fail, but upon testing, it does have the 'op'. So
-                // I resorted to checking both just in case
-                auto interval = json["heartbeat_interval"];
-                if (interval.is_object()) {
-                    notify_heartbeater_hello(interval);
+    websock.async_next_message(
+        [&](const boost::system::error_code &e, const uint8_t *data, size_t len) {
+            if (e) {
+                if (e == websocket::error::websocket_connection_closed) {
+                    auto code = websock.close_code();
+                    ctx.post([&]() {
+                        callback(make_error_code(static_cast<voice_gateway::error>(code)));
+                    });
+                } else {
+                    std::cerr << "voice gateway websocket read error: " << e.message() << "\n";
+                    ctx.post([&]() { callback(e); });
                 }
             }
-            // No error, do the loop again
-            event_loop();
+            const char *begin = reinterpret_cast<const char *>(data);
+            const char *end = begin + len;
+
+            std::cout << "VOICE GATEWAY: ";
+            std::cout.write(begin, len);
+            std::cout << "\n";
+            // Parse the results as a json object
+            try {
+                nlohmann::json json = nlohmann::json::parse(begin, end);
+
+                auto op = json["op"];
+                auto payload_data = json["d"];
+
+                if (op.is_number()) {
+                    auto gateway_op = static_cast<gtw_voice_op_recv>(op.get<int>());
+                    switch (gateway_op) {
+                        case gtw_voice_op_recv::ready:
+                            extract_ready_info(payload_data);
+                            break;
+                        case gtw_voice_op_recv::session_description:
+                            extract_session_info(payload_data);
+                            break;
+                        case gtw_voice_op_recv::speaking:
+                            break;
+                        case gtw_voice_op_recv::heartbeat_ack:
+                            // We should check if the nonce is the same as the one sent by the
+                            // heartbeater
+                            beater->on_heartbeat_ack();
+                            break;
+                        case gtw_voice_op_recv::hello:
+                            notify_heartbeater_hello(payload_data);
+                            break;
+                        case gtw_voice_op_recv::resumed:
+                            // Successfully resumed
+                            state = connection_state::connected;
+                            break;
+                        case gtw_voice_op_recv::client_disconnect:
+                            break;
+                    }
+                } else {
+                    // Discord reference says the hello opcode 8 doesn't contain an 'op' field, so
+                    // the above if statement will fail, but upon testing, it does have the 'op'. So
+                    // I resorted to checking both just in case
+                    auto interval = json["heartbeat_interval"];
+                    if (interval.is_object()) {
+                        notify_heartbeater_hello(interval);
+                    }
+                }
+                // No error, do the loop again
+                event_loop();
             } catch (std::exception &e) {
                 std::cerr << "Error in voice gateway: " << e.what() << "\n";
             }
-        }
-    );
+        });
 }
 
 void discord::voice_gateway::heartbeat()
@@ -249,27 +245,27 @@ void discord::voice_gateway::ip_discovery()
             send_ip_discovery_datagram();
     });
 
-    socket.async_receive_from(
-        boost::asio::buffer(buffer, buffer.size()), receive_endpoint,
-        [&](const boost::system::error_code &e, size_t transferred) {
-            if (e) {
-                ctx.post([&]() { callback(e); });
-            } else if (transferred >= 70) {
-                // We got our response, cancel the next send
-                timer.cancel();
+    socket.async_receive_from(boost::asio::buffer(buffer, buffer.size()), receive_endpoint,
+                              [&](const boost::system::error_code &e, size_t transferred) {
+                                  if (e) {
+                                      ctx.post([&]() { callback(e); });
+                                  } else if (transferred >= 70) {
+                                      // We got our response, cancel the next send
+                                      timer.cancel();
 
-                // First 4 bytes of buffer should be SSRC, next is beginning of this udp socket's
-                // external IP
-                external_ip = std::string((char *) &buffer[4]);
+                                      // First 4 bytes of buffer should be SSRC, next is beginning
+                                      // of this udp socket's external IP
+                                      external_ip = std::string((char *) &buffer[4]);
 
-                // Extract the port the udp socket is on (little-endian)
-                uint16_t local_udp_port = (buffer[69] << 8) | buffer[68];
+                                      // Extract the port the udp socket is on (little-endian)
+                                      uint16_t local_udp_port = (buffer[69] << 8) | buffer[68];
 
-                std::cout << "UDP socket bound at " << external_ip << ":" << local_udp_port << "\n";
+                                      std::cout << "UDP socket bound at " << external_ip << ":"
+                                                << local_udp_port << "\n";
 
-                select(local_udp_port);
-            }
-        });
+                                      select(local_udp_port);
+                                  }
+                              });
 }
 
 void discord::voice_gateway::send_ip_discovery_datagram()
@@ -281,9 +277,7 @@ void discord::voice_gateway::send_ip_discovery_datagram()
                 std::cerr << "Could not send udp packet to voice server: " << e.message() << "\n";
             }
             if (retries == 0) {
-                ctx.post([&]() {
-                    callback(make_error_code(error::ip_discovery_failed));
-                });
+                ctx.post([&]() { callback(make_error_code(error::ip_discovery_failed)); });
                 socket.close();
                 return;
             }
@@ -337,7 +331,7 @@ void discord::voice_gateway::stop_speaking(message_sent_callback c)
 }
 
 void discord::voice_gateway::play(const uint8_t *opus_encoded, size_t encoded_len,
-                                       size_t frame_size)
+                                  size_t frame_size)
 {
     if (!is_speaking) {
         is_speaking = true;
@@ -358,7 +352,7 @@ void discord::voice_gateway::stop()
 }
 
 void discord::voice_gateway::send_audio(const uint8_t *opus_encoded, size_t encoded_len,
-                                             size_t frame_size)
+                                        size_t frame_size)
 {
     uint8_t *buf = buffer.data();
     auto write_audio = &buf[12];
@@ -373,8 +367,8 @@ void discord::voice_gateway::send_audio(const uint8_t *opus_encoded, size_t enco
     seq_num++;
     timestamp += frame_size;
 
-    auto error = discord::crypto::xsalsa20_poly1305_encrypt(
-            opus_encoded, write_audio, encoded_len, secret_key.data(), nonce);
+    auto error = discord::crypto::xsalsa20_poly1305_encrypt(opus_encoded, write_audio, encoded_len,
+                                                            secret_key.data(), nonce);
 
     if (error) {
         std::cerr << "Error encrypting data\n";
@@ -390,7 +384,7 @@ void discord::voice_gateway::send_audio(const uint8_t *opus_encoded, size_t enco
 }
 
 void discord::voice_gateway::write_header(unsigned char *buffer, uint16_t seq_num,
-                                               uint32_t timestamp)
+                                          uint32_t timestamp)
 {
     buffer[0] = 0x80;
     buffer[1] = 0x78;
@@ -407,4 +401,58 @@ void discord::voice_gateway::write_header(unsigned char *buffer, uint16_t seq_nu
     buffer[9] = (ssrc & 0x00FF0000) >> 16;
     buffer[10] = (ssrc & 0x0000FF00) >> 8;
     buffer[11] = (ssrc & 0x000000FF);
+}
+
+const char *discord::voice_gateway::error_category::name() const noexcept
+{
+    return "voice_gateway";
+}
+
+std::string discord::voice_gateway::error_category::message(int ev) const noexcept
+{
+    switch (voice_gateway::error(ev)) {
+        case voice_gateway::error::ip_discovery_failed:
+            return "ip discovery failed";
+        case voice_gateway::error::unknown_opcode:
+            return "invalid opcode";
+        case voice_gateway::error::not_authenticated:
+            return "sent payload before identified";
+        case voice_gateway::error::authentication_failed:
+            return "incorrect token in identify payload";
+        case voice_gateway::error::already_authenticated:
+            return "sent more than one identify payload";
+        case voice_gateway::error::session_no_longer_valid:
+            return "session is no longer valid";
+        case voice_gateway::error::session_timeout:
+            return "session has timed out";
+        case voice_gateway::error::server_not_found:
+            return "server not found";
+        case voice_gateway::error::unknown_protocol:
+            return "unrecognized protocol";
+        case voice_gateway::error::disconnected:
+            return "disconnected";
+        case voice_gateway::error::voice_server_crashed:
+            return "voice server crashed";
+        case voice_gateway::error::unknown_encryption_mode:
+            return "unrecognized encryption";
+    }
+    return "Unknown voice gateway error";
+}
+
+bool discord::voice_gateway::error_category::equivalent(const boost::system::error_code &code,
+                                                        int condition) const noexcept
+{
+    return &code.category() == this && static_cast<int>(code.value()) == condition;
+}
+
+const boost::system::error_category &discord::voice_gateway::error_category::instance()
+{
+    static voice_gateway::error_category instance;
+    return instance;
+}
+
+boost::system::error_code make_error_code(discord::voice_gateway::error code) noexcept
+{
+    return boost::system::error_code{(int) code,
+                                     discord::voice_gateway::error_category::instance()};
 }

@@ -6,8 +6,8 @@
 
 #include <net/base64.h>
 #include <net/resource_parser.h>
-#include <net/websocket.h>
 #include <net/send_queue.h>
+#include <net/websocket.h>
 
 using random_byte_engine =
     std::independent_bits_engine<std::default_random_engine, CHAR_BIT, unsigned char>;
@@ -17,8 +17,8 @@ thread_local random_byte_engine generator{
 
 static size_t get_frame_size(size_t bytes);
 static void write_frame_size(uint8_t *frame, size_t size);
-static void write_masked_data(const uint8_t *in, uint8_t *out, size_t size);
-static std::vector<uint8_t> build_frame(const uint8_t *data, size_t len, websocket_opcode op);
+static void write_masked_data(const uint8_t *in, uint8_t *out, size_t size, uint8_t mask[4]);
+static std::vector<uint8_t> build_frame(const uint8_t *data, size_t len, websocket::opcode op);
 
 websocket::websocket(boost::asio::io_context &ioc)
     : io{ioc}, ctx{boost::asio::ssl::context::tls_client}, stream{ioc, ctx}, close_status{0}
@@ -31,8 +31,8 @@ websocket::~websocket()
 }
 
 void websocket::async_connect(const std::string &host, const std::string &service,
-                                   const std::string &resource, boost::asio::ip::tcp::resolver &resolver,
-                                   message_sent_callback c)
+                              const std::string &resource, boost::asio::ip::tcp::resolver &resolver,
+                              message_sent_callback c)
 {
     this->host = host;
     this->resource = resource;
@@ -40,15 +40,13 @@ void websocket::async_connect(const std::string &host, const std::string &servic
     secure_connection = (service == "443" || service == "https" || service == "wss");
     queue = std::make_unique<send_queue>(stream, io, secure_connection);
 
-    auto callback = [&](auto &ec, auto it) {
-        on_resolve(ec, it);
-    };
+    auto callback = [this](auto &ec, auto it) { on_resolve(ec, it); };
     boost::asio::ip::tcp::resolver::query query{host, service};
     resolver.async_resolve(query, callback);
 }
 
 void websocket::async_connect(const std::string &url, boost::asio::ip::tcp::resolver &resolver,
-                                   message_sent_callback c)
+                              message_sent_callback c)
 {
     auto parsed = resource_parser::parse(url);
     int port = parsed.port;
@@ -68,17 +66,19 @@ void websocket::async_connect(const std::string &url, boost::asio::ip::tcp::reso
     async_connect(host, parsed.protocol, resource, resolver, c);
 }
 
-void websocket::on_resolve(const boost::system::error_code &ec, endpoint_iterator it)
+void websocket::on_resolve(const boost::system::error_code &ec,
+                           boost::asio::ip::tcp::resolver::iterator it)
 {
     if (ec) {
         throw std::runtime_error("Could not resolve host: " + host);
     }
 
-    auto callback = [=](auto &ec, auto it) { on_connect(ec, it); };
+    auto callback = [this](auto &ec, auto it) { on_connect(ec, it); };
     boost::asio::async_connect(stream.lowest_layer(), it, callback);
 }
 
-void websocket::on_connect(const boost::system::error_code &ec, endpoint_iterator it)
+void websocket::on_connect(const boost::system::error_code &ec,
+                           boost::asio::ip::tcp::resolver::iterator)
 {
     if (ec) {
         throw std::runtime_error("Could not connect to " + host + ": " + ec.message());
@@ -96,13 +96,12 @@ void websocket::do_handshake()
 {
     // Load default certificate store
     ctx.set_default_verify_paths();
-    auto callback =
-        [&](auto &ec) {
-            if (ec) {
-                throw std::runtime_error("SSL handshake with " + host + " failed: " + ec.message());
-            }
-            send_upgrade();  // Handshake successful
-        };
+    auto callback = [&](auto &ec) {
+        if (ec) {
+            throw std::runtime_error("SSL handshake with " + host + " failed: " + ec.message());
+        }
+        send_upgrade();  // Handshake successful
+    };
 
     // Make sure host is verified during handshake
     stream.set_verify_mode(boost::asio::ssl::verify_peer);
@@ -140,21 +139,19 @@ void websocket::send_upgrade()
     std::vector<uint8_t> data{request.begin(), request.end()};
 
     // Submit to the write queue the HTTP connection upgrade request, and the callback
-    auto callback = [=](auto &ec, size_t) { on_websocket_upgrade_sent(ec); };
+    auto callback = [=](auto &ec, size_t) { on_upgrade_sent(ec); };
     queue->enqueue_message(data, callback);
 }
 
-void websocket::on_websocket_upgrade_sent(const boost::system::error_code &ec)
+void websocket::on_upgrade_sent(const boost::system::error_code &ec)
 {
     if (ec) {
         std::cerr << "Error sending upgrade: " << ec.message() << "\n";
-        io.post([&]() { connect_callback(ec, 0); });
+        io.post([=]() { connect_callback(ec, 0); });
         return;
     }
     auto mutable_buffer = buffer.prepare(4096);
-    auto callback = [=](auto &ec, auto transferred) {
-        on_websocket_upgrade_receive(ec, transferred);
-    };
+    auto callback = [this](auto &ec, auto transferred) { on_upgrade_receive(ec, transferred); };
     if (secure_connection) {
         stream.async_read_some(mutable_buffer, callback);
     } else {
@@ -162,8 +159,7 @@ void websocket::on_websocket_upgrade_sent(const boost::system::error_code &ec)
     }
 }
 
-void websocket::on_websocket_upgrade_receive(const boost::system::error_code &ec,
-                                                  size_t transferred)
+void websocket::on_upgrade_receive(const boost::system::error_code &ec, size_t transferred)
 {
     if (ec) {
         std::cerr << "Error reading websocket upgrade reponse: " << ec.message() << "\n";
@@ -176,23 +172,19 @@ void websocket::on_websocket_upgrade_receive(const boost::system::error_code &ec
     response.parse(buffer);
 
     if (response.is_complete()) {
-        check_websocket_upgrade();
+        check_upgrade();
     } else {
-        auto callback = [=](auto &ec, auto transferred) {
-            on_websocket_upgrade_receive(ec, transferred);
-        };
+        auto callback = [this](auto &ec, auto transferred) { on_upgrade_receive(ec, transferred); };
         // Http response is incomplete, read more
         enqueue_read(4096, callback);
     }
 }
 
-void websocket::check_websocket_upgrade()
+void websocket::check_upgrade()
 {
     if (response.status_code() != 101) {
         // No version renegotiation. We only support WebSocket v13
-        auto callback = [=]() {
-            connect_callback(websocket_error::upgrade_failed, 0);
-        };
+        auto callback = [=]() { connect_callback(error::upgrade_failed, 0); };
         io.post(callback);
         return;
     }
@@ -200,17 +192,16 @@ void websocket::check_websocket_upgrade()
     auto &headers_map = response.headers();
     auto it = headers_map.find("sec-websocket-accept");
     if (it == headers_map.end()) {
-        io.post([=]() { connect_callback(websocket_error::no_upgrade_key, 0); });
-        return;
-    }
-    if (it->second != expected_accept) {
-        io.post([=]() { connect_callback(websocket_error::bad_upgrade_key, 0); });
+        io.post([=]() { connect_callback(error::no_upgrade_key, 0); });
+    } else if (it->second != expected_accept) {
+        io.post([=]() { connect_callback(error::bad_upgrade_key, 0); });
     } else {
+        // Successfully connected and upgraded connection to websocket
         io.post([=]() { connect_callback({}, 0); });
     }
 }
 
-void websocket::close(websocket_status_code code)
+void websocket::close(websocket::status_code code)
 {
     // TODO: check if we are sending in response, or initiating close
     if (close_status)
@@ -226,23 +217,23 @@ void websocket::close(websocket_status_code code)
     auto callback = [=](auto &, size_t) {
         std::cout << "Close frame sent with value: " << close_status << "\n";
     };
-    build_frame_and_send_async(buf, sizeof(buf), websocket_opcode::close, callback);
+    build_frame_and_send_async(buf, sizeof(buf), opcode::close, callback);
 }
 
 void websocket::async_send(const std::string &str, message_sent_callback c)
 {
-    build_frame_and_send_async(str.c_str(), str.size(), websocket_opcode::text, c);
+    build_frame_and_send_async(str.c_str(), str.size(), opcode::text, c);
 }
 
 void websocket::async_send(const void *buffer, size_t size, message_sent_callback c)
 {
-    build_frame_and_send_async(buffer, size, websocket_opcode::text, c);
+    build_frame_and_send_async(buffer, size, opcode::text, c);
 }
 
-void websocket::build_frame_and_send_async(const void *data, size_t len, websocket_opcode op,
-                                                message_sent_callback c)
+void websocket::build_frame_and_send_async(const void *data, size_t len, websocket::opcode op,
+                                           message_sent_callback c)
 {
-    auto frame = build_frame(reinterpret_cast<const uint8_t*>(data), len, op);
+    auto frame = build_frame(reinterpret_cast<const uint8_t *>(data), len, op);
     queue->enqueue_message(frame, c);
 }
 
@@ -250,7 +241,7 @@ void websocket::async_next_message(message_received_callback c)
 {
     // If the connection has been closed, notify the caller immediately
     if (close_status) {
-        c(websocket_error::websocket_connection_closed, nullptr, 0);
+        c(error::websocket_connection_closed, nullptr, 0);
     }
     // Otherwise continue on, trying to parse any available buffered data, and enqueueing reads as
     // neccessary to read an entire WebSocket frame
@@ -279,9 +270,7 @@ void websocket::check_parser_state()
 
     auto amount_to_read = std::max((size_t) 4096, (size_t)(parser.get_size() - buffer.size()));
     if (!parser.is_frame_complete() || parser.get_size() > buffer.size()) {
-        auto callback = [=](auto &ec, auto transferred) {
-            on_websocket_upgrade_receive(ec, transferred);
-        };
+        auto callback = [=](auto &ec, auto transferred) { on_data_receive(ec, transferred); };
         enqueue_read(amount_to_read, callback);
     } else {
         // We have enough data at this point
@@ -299,18 +288,18 @@ void websocket::enqueue_read(size_t amount, message_sent_callback c)
     }
 }
 
-void websocket::on_websocket_data_receive(const boost::system::error_code &ec,
-                                               size_t transferred)
+void websocket::on_data_receive(const boost::system::error_code &ec, size_t transferred)
 {
-    if (ec) {
-        throw std::runtime_error("Websocket message data receive error");
-    }
     if (ec == boost::asio::error::eof) {
         // Connection has been closed, if we didn't get a close value, set it to 1 (not a valid
         // WebSocket close code, but it will indicate closed connection on next read)
         if (!close_status)
             close_status = 1;
+    } else if (ec) {
+        // Some other error
+        throw std::runtime_error("Error receiving data from websocket: " + ec.message());
     }
+
     // Commit the read data to the stream
     buffer.commit(transferred);
 
@@ -325,33 +314,33 @@ void websocket::handle_frame()
     bool is_control_frame = false;
 
     switch (parser.frame_type()) {
-        case websocket_opcode::continuation:
+        case opcode::continuation:
             // TODO: keep track of frame state, e.g. if we got text no FIN, expect continuation
             // until FIN (with control frames allowed in between)
             break;
-        case websocket_opcode::text:
+        case opcode::text:
             break;
-        case websocket_opcode::binary:
+        case opcode::binary:
             break;
-        case websocket_opcode::close:
+        case opcode::close:
             if (close_status)
                 break;
             // Response with the same close code if available
             if (parser.get_size() >= 2) {
                 // Respond with the same code sent
                 uint16_t code = (data[0] << 8) | data[1];
-                close(static_cast<websocket_status_code>(code));
+                close(static_cast<websocket::status_code>(code));
             } else {
                 // Invalid WebSocket close frame... respond with normal close response
-                close(websocket_status_code::normal);
+                close(websocket::status_code::normal);
             }
             is_control_frame = true;
             break;
-        case websocket_opcode::ping:
+        case opcode::ping:
             pong(data, size);
             is_control_frame = true;
             break;
-        case websocket_opcode::pong:
+        case opcode::pong:
             is_control_frame = true;
             break;
         default:
@@ -375,7 +364,7 @@ void websocket::pong(const uint8_t *msg, size_t len)
 {
     // At most, send 125 bytes in control frame
     auto callback = [](auto &, size_t) { std::cout << "Sent pong\n"; };
-    build_frame_and_send_async(msg, std::min(len, (size_t) 125), websocket_opcode::pong, callback);
+    build_frame_and_send_async(msg, std::min(len, (size_t) 125), opcode::pong, callback);
 }
 
 uint16_t websocket::close_code()
@@ -383,12 +372,12 @@ uint16_t websocket::close_code()
     return close_status;
 }
 
-frame_parser::frame_parser()
+websocket::frame_parser::frame_parser()
 {
     reset();
 }
 
-void frame_parser::parse(boost::asio::streambuf &source)
+void websocket::frame_parser::parse(boost::asio::streambuf &source)
 {
     if (state == parse_state::begin) {
         parse_frame(source);
@@ -398,28 +387,28 @@ void frame_parser::parse(boost::asio::streambuf &source)
     }
 }
 
-void frame_parser::reset()
+void websocket::frame_parser::reset()
 {
     fin_frame = false;
     masked = false;
     state = parse_state::begin;
     payload_length = 0;
     size = 0;
-    f_type = websocket_opcode::none;
+    f_type = opcode::none;
 }
 
-void frame_parser::parse_frame(boost::asio::streambuf &buf)
+void websocket::frame_parser::parse_frame(boost::asio::streambuf &buf)
 {
     const auto *data = boost::asio::buffer_cast<const uint8_t *>(buf.data());
     if (buf.size() > 0) {
         fin_frame = (data[0] & 0x80) != 0;
-        f_type = static_cast<websocket_opcode>(data[0] & 0x0F);
+        f_type = static_cast<opcode>(data[0] & 0x0F);
         buf.consume(1);
         state = parse_state::length;
     }
 }
 
-void frame_parser::parse_payload_length(boost::asio::streambuf &buf)
+void websocket::frame_parser::parse_payload_length(boost::asio::streambuf &buf)
 {
     const auto *data = boost::asio::buffer_cast<const uint8_t *>(buf.data());
     if (buf.size() == 0)
@@ -449,34 +438,34 @@ void frame_parser::parse_payload_length(boost::asio::streambuf &buf)
     }
 }
 
-bool frame_parser::is_frame_complete()
+bool websocket::frame_parser::is_frame_complete()
 {
     return state == parse_state::frame_done;
 }
 
-websocket_opcode frame_parser::frame_type()
+websocket::opcode websocket::frame_parser::frame_type()
 {
     return f_type;
 }
 
-uint64_t frame_parser::get_size()
+uint64_t websocket::frame_parser::get_size()
 {
     return size;
 }
 
-bool frame_parser::is_fin()
+bool websocket::frame_parser::is_fin()
 {
     return fin_frame;
 }
 
-bool frame_parser::is_masked()
+bool websocket::frame_parser::is_masked()
 {
     return masked;
 }
 
-bool frame_parser::is_new_state()
+bool websocket::frame_parser::is_new_state()
 {
-    return size == 0 && f_type == websocket_opcode::none;
+    return size == 0 && f_type == opcode::none;
 }
 
 // Return the number bytes needed to encoded WebSocket frame + bytes
@@ -512,38 +501,35 @@ static void write_frame_size(uint8_t *frame, size_t size)
 }
 
 // Assumes there is room in 'out' for size + 4 bytes
-static void write_masked_data(const uint8_t *in, uint8_t *out, size_t size)
+static void write_masked_data(const uint8_t *in, uint8_t *out, size_t size, uint8_t mask[4])
 {
-    auto mask0 = generator();
-    auto mask1 = generator();
-    auto mask2 = generator();
-    auto mask3 = generator();
-
-    *out++ = mask0;
-    *out++ = mask1;
-    *out++ = mask2;
-    *out++ = mask3;
+    *out++ = mask[0];
+    *out++ = mask[1];
+    *out++ = mask[2];
+    *out++ = mask[3];
 
     while (size > 3) {
-        *out++ = *in++ ^ mask0;
-        *out++ = *in++ ^ mask1;
-        *out++ = *in++ ^ mask2;
-        *out++ = *in++ ^ mask3;
+        *out++ = *in++ ^ mask[0];
+        *out++ = *in++ ^ mask[1];
+        *out++ = *in++ ^ mask[2];
+        *out++ = *in++ ^ mask[3];
         size -= 4;
     }
     if (size > 0)
-        *out++ = *in++ ^ mask0;
+        *out++ = *in++ ^ mask[0];
     if (size > 1)
-        *out++ = *in++ ^ mask1;
+        *out++ = *in++ ^ mask[1];
     if (size > 2)
-        *out++ = *in++ ^ mask2;
+        *out++ = *in++ ^ mask[2];
 }
 
-static std::vector<uint8_t> build_frame(const uint8_t *data, size_t len, websocket_opcode op)
+static std::vector<uint8_t> build_frame(const uint8_t *data, size_t len, websocket::opcode op)
 {
     // out_size is the size of the buffer data + WebSocket frame
     size_t out_size = get_frame_size(len);
     auto frame = std::vector<uint8_t>(out_size);
+    uint8_t mask[4];
+    std::generate(mask, mask + 4, std::ref(generator));
 
     frame[0] = 0x80;  // FIN bit set (this is a complete frame)
     frame[0] |= static_cast<uint8_t>(op);
@@ -552,17 +538,45 @@ static std::vector<uint8_t> build_frame(const uint8_t *data, size_t len, websock
     auto *write_to = &frame[out_size - len - 4];  // -4 to get to start of where mask goes
 
     write_frame_size(frame.data(), len);
-    write_masked_data(read_from, write_to, len);
+    write_masked_data(read_from, write_to, len, mask);
     return frame;
 }
 
-const boost::system::error_category &websocket_error_category()
+const char *websocket::error_category::name() const noexcept
 {
-    static websocket_category instance;
+    return "WebSocket";
+}
+
+std::string websocket::error_category::message(int ev) const noexcept
+{
+    switch (websocket::error(ev)) {
+        case websocket::error::websocket_connection_closed:
+            return "The WebSocket connection has closed";
+        case websocket::error::server_masked_data:
+            return "The server sent masked data";
+        case websocket::error::upgrade_failed:
+            return "WebSocket upgrade failed";
+        case websocket::error::bad_upgrade_key:
+            return "The server sent a bad Sec-WebSocket-Accept";
+        case websocket::error::no_upgrade_key:
+            return "No Sec-WebSocket-Accept returned by server";
+    }
+    return "Unknown WebSocket error";
+}
+
+bool websocket::error_category::equivalent(const boost::system::error_code &code,
+                                           int condition) const noexcept
+{
+    return &code.category() == this && static_cast<int>(code.value()) == condition;
+}
+
+const boost::system::error_category &websocket::error_category::instance()
+{
+    static websocket::error_category instance;
     return instance;
 }
 
-boost::system::error_code make_error_code(websocket_error code) noexcept
+boost::system::error_code make_error_code(websocket::error code) noexcept
 {
-    return boost::system::error_code{(int) code, websocket_error_category()};
+    return boost::system::error_code{(int) code, websocket::error_category::instance()};
 }

@@ -1,7 +1,7 @@
 #include <net/send_queue.h>
 
 send_queue::send_queue(boost::asio::ssl::stream<boost::asio::ip::tcp::socket> &stream,
-                            boost::asio::io_context &ioc, bool secure)
+                       boost::asio::io_context &ioc, bool secure)
     : stream{stream}, io{ioc}, secure{secure}, write_strand{ioc}
 {
 }
@@ -34,7 +34,7 @@ void send_queue::start_packet_send()
 
 void send_queue::packet_send_done(const boost::system::error_code &ec, size_t transferred)
 {
-    auto &callback = callback_queue.front();
+    auto callback = callback_queue.front();
     io.post([=]() { callback(ec, transferred); });
     write_queue.pop_front();
     callback_queue.pop_front();

@@ -6,8 +6,8 @@
 #include <thread>
 
 #include <api.h>
-#include <json.hpp>
 #include <opcodes.h>
+#include <json.hpp>
 
 namespace discord
 {

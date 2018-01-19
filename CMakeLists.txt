@@ -53,7 +53,6 @@ set(HEADER_FILES
         src/net/send_queue.h
         src/net/websocket.h
         src/opcodes.h
-        src/string_utils.h
         src/voice/crypto.h
         src/voice/opus_encoder.h
         src/voice/voice_gateway.h

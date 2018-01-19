@@ -17,68 +17,31 @@
 
 namespace discord
 {
-enum class gateway_error {
-    unknown_error = 4000,
-    unknown_opcode = 4001,
-    decode_error = 4002,
-    not_authenticated = 4003,
-    authentication_failed = 4004,
-    already_authenticated = 4005,
-    invalid_seq = 4007,
-    rate_limited = 4008,
-    session_timeout = 4009,
-    invalid_shard = 4010,
-    sharding_required = 4011
-};
-
-class gateway_error_category : public boost::system::error_category
-{
-public:
-    virtual const char *name() const noexcept
-    {
-        return "gateway";
-    }
-
-    virtual std::string message(int ev) const noexcept
-    {
-        switch (gateway_error(ev)) {
-            case gateway_error::unknown_error:
-                return "unknown error";
-            case gateway_error::unknown_opcode:
-                return "invalid opcode";
-            case gateway_error::decode_error:
-                return "decode error";
-            case gateway_error::not_authenticated:
-                return "sent payload before identified";
-            case gateway_error::authentication_failed:
-                return "incorrect token in identify payload";
-            case gateway_error::already_authenticated:
-                return "sent more than one identify payload";
-            case gateway_error::invalid_seq:
-                return "invalid sequence number";
-            case gateway_error::rate_limited:
-                return "rate limited";
-            case gateway_error::session_timeout:
-                return "session has timed out";
-            case gateway_error::invalid_shard:
-                return "invalid shard";
-            case gateway_error::sharding_required:
-                return "sharding required";
-        }
-        return "Unknown gateway error";
-    }
-
-    virtual bool equivalent(const boost::system::error_code &code, int condition) const noexcept
-    {
-        return &code.category() == this && static_cast<int>(code.value()) == condition;
-    }
-};
-
-const boost::system::error_category &gateway_category();
-
 class gateway : public beatable
 {
 public:
+    enum class error {
+        unknown_error = 4000,
+        unknown_opcode = 4001,
+        decode_error = 4002,
+        not_authenticated = 4003,
+        authentication_failed = 4004,
+        already_authenticated = 4005,
+        invalid_seq = 4007,
+        rate_limited = 4008,
+        session_timeout = 4009,
+        invalid_shard = 4010,
+        sharding_required = 4011
+    };
+
+    struct error_category : public boost::system::error_category {
+        virtual const char *name() const noexcept;
+        virtual std::string message(int ev) const noexcept;
+        virtual bool equivalent(const boost::system::error_code &code, int condition) const
+            noexcept;
+        static const boost::system::error_category &instance();
+    };
+
     gateway(boost::asio::io_context &ctx, const std::string &token,
             boost::asio::ip::tcp::resolver &resolver);
     ~gateway();
@@ -133,6 +96,10 @@ private:
 };
 }
 
-boost::system::error_code make_error_code(discord::gateway_error code) noexcept;
+boost::system::error_code make_error_code(discord::gateway::error code) noexcept;
+
+template<>
+struct boost::system::is_error_code_enum<discord::gateway::error> : public boost::true_type {
+};
 
 #endif

@@ -1,11 +1,11 @@
 #ifndef CMD_DISCORD_VOICE_GATEWAY_H
 #define CMD_DISCORD_VOICE_GATEWAY_H
 
-#include <memory>
-#include <iostream>
-#include <vector>
-#include <cstdint>
 #include <boost/asio.hpp>
+#include <cstdint>
+#include <iostream>
+#include <memory>
+#include <vector>
 
 #include <delayed_message_sender.h>
 #include <heartbeater.h>
@@ -33,61 +33,13 @@ public:
         unknown_encryption_mode = 4016
     };
 
-    class error_category : public boost::system::error_category
-    {
-    public:
-        virtual const char *name() const noexcept
-        {
-            return "voice_gateway";
-        }
-
-        virtual std::string message(int ev) const noexcept
-        {
-            switch (error(ev)) {
-                case error::ip_discovery_failed:
-                    return "ip discovery failed";
-                case error::unknown_opcode:
-                    return "invalid opcode";
-                case error::not_authenticated:
-                    return "sent payload before identified";
-                case error::authentication_failed:
-                    return "incorrect token in identify payload";
-                case error::already_authenticated:
-                    return "sent more than one identify payload";
-                case error::session_no_longer_valid:
-                    return "session is no longer valid";
-                case error::session_timeout:
-                    return "session has timed out";
-                case error::server_not_found:
-                    return "server not found";
-                case error::unknown_protocol:
-                    return "unrecognized protocol";
-                case error::disconnected:
-                    return "disconnected";
-                case error::voice_server_crashed:
-                    return "voice server crashed";
-                case error::unknown_encryption_mode:
-                    return "unrecognized encryption";
-            }
-            return "Unknown voice gateway error";
-        }
-
-        virtual bool equivalent(const boost::system::error_code &code, int condition) const noexcept
-        {
-            return &code.category() == this && static_cast<int>(code.value()) == condition;
-        }
+    struct error_category : public boost::system::error_category {
+        virtual const char *name() const noexcept;
+        virtual std::string message(int ev) const noexcept;
+        virtual bool equivalent(const boost::system::error_code &code, int condition) const
+            noexcept;
+        static const boost::system::error_category &instance();
     };
-
-    static const boost::system::error_category &category()
-    {
-        static voice_gateway::error_category instance;
-        return instance;
-    }
-
-    static boost::system::error_code make_error_code(voice_gateway::error code) noexcept
-    {
-        return boost::system::error_code{(int) code, category()};
-    }
 
     using connect_callback = std::function<void(const boost::system::error_code &)>;
 
@@ -127,7 +79,7 @@ private:
     bool is_speaking;
 
     connect_callback callback;
-    
+
     void start_speaking(message_sent_callback c);
     void stop_speaking(message_sent_callback c);
     void send_audio(const uint8_t *opus_encoded, size_t encoded_len, size_t frame_size);
@@ -143,8 +95,7 @@ private:
     void select(uint16_t local_udp_port);
     void write_header(unsigned char *buffer, uint16_t seq_num, uint32_t timestamp);
 
-    message_sent_callback print_info = [](const boost::system::error_code &e,
-                                                          size_t transferred) {
+    message_sent_callback print_info = [](const boost::system::error_code &e, size_t transferred) {
         if (e) {
             std::cerr << "Voice gateway send error: " << e.message() << "\n";
         } else {
@@ -154,13 +105,10 @@ private:
 };
 }
 
-template<>
-struct std::is_error_code_enum<discord::voice_gateway::error> : public std::true_type {
-};
+boost::system::error_code make_error_code(discord::voice_gateway::error code) noexcept;
 
 template<>
 struct boost::system::is_error_code_enum<discord::voice_gateway::error> : public boost::true_type {
 };
-
 
 #endif

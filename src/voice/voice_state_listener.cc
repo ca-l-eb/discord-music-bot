@@ -1,14 +1,25 @@
-#include <boost/process.hpp>
 #include <string_utils.h>
+#include <boost/process.hpp>
 #include <iostream>
 #include <regex>
 
 #include <net/resource_parser.h>
 #include <voice/voice_state_listener.h>
 
+static void stop_process(discord::music_process &process)
+{
+    // Cancel timer
+    process.timer.cancel();
+
+    // Close pipe
+
+    // Kill youtube_dl process
+    process.youtube_dl.terminate();
+}
+
 discord::voice_state_listener::voice_state_listener(boost::asio::io_context &ctx,
-                                                         discord::gateway &gateway,
-                                                         discord::gateway_store &store)
+                                                    discord::gateway &gateway,
+                                                    discord::gateway_store &store)
     : ctx{ctx}, gateway{gateway}, store{store}
 {
 }
@@ -16,7 +27,7 @@ discord::voice_state_listener::voice_state_listener(boost::asio::io_context &ctx
 discord::voice_state_listener::~voice_state_listener() {}
 
 void discord::voice_state_listener::handle(discord::gateway &, gtw_op_recv,
-                                                const nlohmann::json &data, const std::string &type)
+                                           const nlohmann::json &data, const std::string &type)
 {
     if (type == "VOICE_STATE_UPDATE") {
         voice_state_update(data);
@@ -85,7 +96,7 @@ void discord::voice_state_listener::voice_server_update(const nlohmann::json &da
             std::cerr << "Voice gateway connection error: " << e.message() << "\n";
         } else {
             std::cout << "Connected to voice gateway. Ready to send audio\n";
-            vg.state = voice_gateway_entry::gateway_state::connected;
+            vg.state = voice_gateway_entry::state::connected;
         }
     });
 }
@@ -113,7 +124,7 @@ void discord::voice_state_listener::message_create(const nlohmann::json &data)
 }
 
 void discord::voice_state_listener::check_command(const std::string &content,
-                                                       const nlohmann::json &json)
+                                                  const nlohmann::json &json)
 {
     static std::regex command_re{R"(^:(\S+)(?:\s+(.+))?$)"};
     std::smatch matcher;
@@ -142,8 +153,7 @@ void discord::voice_state_listener::check_command(const std::string &content,
         do_pause(json);
 }
 
-void discord::voice_state_listener::do_join(const std::string &params,
-                                                 const nlohmann::json &json)
+void discord::voice_state_listener::do_join(const std::string &params, const nlohmann::json &json)
 {
     auto channel = json["channel_id"];
     // Look up what guild this channel is in
@@ -161,8 +171,7 @@ void discord::voice_state_listener::do_join(const std::string &params,
     // Look through the guild's channels for channel <params>, if it exists, join, else fail
     // silently
     for (auto &channel : guild.channels) {
-        if (channel.type == discord::channel::channel_type::guild_voice &&
-            channel.name == params) {
+        if (channel.type == discord::channel::channel_type::guild_voice && channel.name == params) {
             // Found a matching voice channel name! Join it if it is different than the currently
             // connected channel (if any)
             if (!connected || it->second.channel_id != channel.id) {
@@ -186,29 +195,21 @@ void discord::voice_state_listener::do_leave(const nlohmann::json &json)
     if (it == voice_gateways.end())
         return;
 
-    if (it->second.state != voice_gateway_entry::gateway_state::disconnected) {
-        it->second.state = voice_gateway_entry::gateway_state::disconnected;
+    if (it->second.state != voice_gateway_entry::state::disconnected) {
+        it->second.state = voice_gateway_entry::state::disconnected;
         it->second.music_queue.clear();
-        
+
         auto &process = it->second.process;
         if (process) {
-            process->timer.cancel();
-            process->new_pipes();
-            process->kill();
-            process->wait();
-            process->frames.clear();
-            //it->second.process = nullptr;
+            stop_process(*process);
         }
         leave_voice_server(guild_id);
     }
 }
 
-void discord::voice_state_listener::do_list(const nlohmann::json &)
-{
-}
+void discord::voice_state_listener::do_list(const nlohmann::json &) {}
 
-void discord::voice_state_listener::do_add(const std::string &params,
-                                                const nlohmann::json &json)
+void discord::voice_state_listener::do_add(const std::string &params, const nlohmann::json &json)
 {
     auto channel = json["channel_id"];
     std::string guild_id = store.lookup_channel(channel.get<std::string>());
@@ -220,7 +221,7 @@ void discord::voice_state_listener::do_add(const std::string &params,
         return;
 
     it->second.music_queue.push_back(params);
-    if (it->second.state == voice_gateway_entry::gateway_state::connected) {
+    if (it->second.state == voice_gateway_entry::state::connected) {
         do_play(json);
     }
 }
@@ -236,16 +237,12 @@ void discord::voice_state_listener::do_skip(const nlohmann::json &json)
     if (it == voice_gateways.end())
         return;
 
-    if (it->second.state == voice_gateway_entry::gateway_state::playing ||
-        it->second.state == voice_gateway_entry::gateway_state::paused) {
-        it->second.state = voice_gateway_entry::gateway_state::connected;
+    if (it->second.state == voice_gateway_entry::state::playing ||
+        it->second.state == voice_gateway_entry::state::paused) {
+        it->second.state = voice_gateway_entry::state::connected;
         auto &process = it->second.process;
         if (process) {
-            process->timer.cancel();
-            process->new_pipes();
-            process->kill();
-            process->wait();
-            process->frames.clear();
+            stop_process(*process);
         }
         if (!it->second.music_queue.empty())
             do_play(json);
@@ -266,13 +263,13 @@ void discord::voice_state_listener::do_play(const nlohmann::json &json)
     if (!it->second.process)
         it->second.process = std::make_unique<discord::music_process>(ctx);
 
-    if (!it->second.music_queue.empty() ||
-        it->second.state == voice_gateway_entry::gateway_state::paused) {
+    if (!it->second.music_queue.empty() || it->second.state == voice_gateway_entry::state::paused) {
         play(it->second);
     }
 }
 
-void discord::voice_state_listener::do_pause(const nlohmann::json &json) {
+void discord::voice_state_listener::do_pause(const nlohmann::json &json)
+{
     auto channel = json["channel_id"];
     std::string guild_id = store.lookup_channel(channel.get<std::string>());
     if (guild_id.empty())
@@ -282,14 +279,14 @@ void discord::voice_state_listener::do_pause(const nlohmann::json &json) {
     if (it == voice_gateways.end())
         return;
 
-    if (it->second.state == voice_gateway_entry::gateway_state::playing)
-        it->second.state = voice_gateway_entry::gateway_state::paused;
+    if (it->second.state == voice_gateway_entry::state::playing)
+        it->second.state = voice_gateway_entry::state::paused;
 }
 
 // Join and leave can't be refactored because the nlohmann::json converts char*s
 // into strings before serializing the json, I guess. Doesn't like using nullptrs with char*
 void discord::voice_state_listener::join_voice_server(const std::string &guild_id,
-                                                           const std::string &channel_id)
+                                                      const std::string &channel_id)
 {
     nlohmann::json json{{"op", static_cast<int>(gtw_op_send::voice_state_update)},
                         {"d",
@@ -314,7 +311,7 @@ void discord::voice_state_listener::leave_voice_server(const std::string &guild_
                           {"channel_id", nullptr},
                           {"self_mute", false},
                           {"self_deaf", false}}}};
-     gateway.send(json.dump(), [](const boost::system::error_code &e, size_t transferred) {
+    gateway.send(json.dump(), [](const boost::system::error_code &e, size_t transferred) {
         if (e) {
             std::cerr << "voice state listener send error: " << e.message() << "\n";
         } else {
@@ -323,83 +320,55 @@ void discord::voice_state_listener::leave_voice_server(const std::string &guild_
     });
 }
 
-void discord::voice_state_listener::play(voice_gateway_entry &entry) 
+void discord::voice_state_listener::play(voice_gateway_entry &entry)
 {
-    if (entry.state == voice_gateway_entry::gateway_state::connected) {
+    if (entry.state == voice_gateway_entry::state::connected) {
         make_audio_process(entry);
-    } else if (entry.state == voice_gateway_entry::gateway_state::paused) {
+    } else if (entry.state == voice_gateway_entry::state::paused) {
         // Resume
-        entry.state = voice_gateway_entry::gateway_state::playing;
+        entry.state = voice_gateway_entry::state::playing;
     }
 
-    if (entry.state == voice_gateway_entry::gateway_state::playing) {
+    if (entry.state == voice_gateway_entry::state::playing) {
         send_audio(entry);
     }
 }
 
-
 void discord::voice_state_listener::make_audio_process(voice_gateway_entry &entry)
 {
-    // Take song off music queue and create new youtube_dl and ffmpeg process for music
+    // Take song off music queue and create new youtube_dl process
     if (entry.music_queue.empty())
         return;
+
     std::string next = entry.music_queue.front();
     entry.music_queue.pop_front();
 
     // Assumes previous pipes have been reset, and proceses already waited on
-    
-    entry.process->youtube_dl = boost::process::child{"youtube-dl -f 251 -o - " + next,
-        boost::process::std_in < boost::process::null,
-        boost::process::std_err > boost::process::null,
-        boost::process::std_out > entry.process->audio_transport};
-    entry.process->ffmpeg = boost::process::child{"ffmpeg -i - -ac 2 -ar 48000 -f s16le -",
-        boost::process::std_in < entry.process->audio_transport,
-        boost::process::std_out > entry.process->pcm_source,
-        boost::process::std_err > boost::process::null};
 
-    std::cout << "created youtube_dl and ffmpeg processes for " << next << "\n";
+    // TODO: add more youtube formats other than 251
+    entry.process->youtube_dl = boost::process::child{
+        "youtube-dl -f 251 -o - " + next,
+        boost::process::std_in<boost::process::null, boost::process::std_err> boost::process::null,
+        boost::process::std_out > entry.process->pipe};
+
+    std::cout << "created youtube_dl processes for " << next << "\n";
+
+    char buf[1];
 
     // Start asynchronous reads from pipe to begin filling buffer with sound samples
-    auto mutable_buffer = entry.process->buffer.prepare(24000 * 2 * sizeof(int16_t));
-    boost::asio::async_read(entry.process->pcm_source, mutable_buffer,
+    boost::asio::async_read(entry.process->pipe, boost::asio::buffer(buf),
                             [&](const boost::system::error_code &e, size_t transferred) {
                                 read_from_pipe(e, transferred, entry);
                             });
 }
 
 void discord::voice_state_listener::read_from_pipe(const boost::system::error_code &e,
-                                                        size_t transferred,
-                                                        voice_gateway_entry &entry)
+                                                   size_t transferred, voice_gateway_entry &entry)
 {
-    // std::cout << "Read " << transferred << " bytes, " << e.message() << "\n";
-    if (transferred > 0) {
-        entry.process->buffer.commit(transferred);
-        encode_audio(entry);
-    }
-    if(!e) {
-        // Read more, until we get eof
-        auto mutable_buffer = entry.process->buffer.prepare(24000 * 2 * sizeof(int16_t));
-        boost::asio::async_read(entry.process->pcm_source, mutable_buffer,
-                                [&](const boost::system::error_code &e, size_t transferred) {
-                                    read_from_pipe(e, transferred, entry);
-                                });
-
-        if (!entry.process->frames.empty() &&
-            entry.state == voice_gateway_entry::gateway_state::connected) {
-            std::cout << "Playing audio...\n";
-            entry.state = voice_gateway_entry::gateway_state::paused;
-            play(entry); // This time we'll actually send data
-        }
+    if (!e) {
+        // Read the entire contents from pipe into std::vector, pass results to audio_decoder
     } else if (e == boost::asio::error::eof) {
-        // Processes have completed
-        std::cout << "Process finished reading from pipe\n";
-        try {
-            entry.process->new_pipes();
-        } catch(std::exception &e) {
-            std::cerr << e.what() << "\n";
-        }
-        entry.process->kill();
-        entry.process->wait();
+        // Audio is ready to be consumed, frame by frame
     } else {
         std::cerr << "Pipe read error: " << e.message() << "\n";
     }
@@ -407,99 +376,40 @@ void discord::voice_state_listener::read_from_pipe(const boost::system::error_co
 
 void discord::voice_state_listener::encode_audio(voice_gateway_entry &entry)
 {
-    std::lock_guard<std::mutex>(entry.process->mutex);
-
-    const auto *pcm = boost::asio::buffer_cast<const int16_t *>(entry.process->buffer.data());
+    const int16_t *pcm;  // Read a frame of pcm data from some container
 
     // 960 samples (20ms) of 2 channel audio at 16 bit
     constexpr int frame_size = 960;
     constexpr int len = frame_size * 2 * sizeof(int16_t);
     uint8_t buf[512];
 
-    int num_blocks = entry.process->buffer.size() / len;
-    for (int i = 0; i < num_blocks; i++) {
-        auto encoded_len = entry.process->encoder.encode(pcm, frame_size, buf, sizeof(buf));
-        if (encoded_len > 0) {
-            std::vector<uint8_t> vec(buf, buf + encoded_len);
-            entry.process->frames.emplace_back(std::move(vec), frame_size);
-        }
-        pcm += frame_size * 2;
-        entry.process->buffer.consume(len);
-    }
-    if (entry.process->buffer.size() > 0) {
-        auto remaining_samples = entry.process->buffer.size() / (2 * sizeof(int16_t));
-        auto encoded_len = entry.process->encoder.encode(pcm, remaining_samples, buf, sizeof(buf));
-        if (encoded_len > 0) {
-            std::vector<uint8_t> vec(buf, buf + encoded_len);
-            entry.process->frames.emplace_back(std::move(vec), frame_size);
-        }
-        entry.process->buffer.consume(entry.process->buffer.size());
-    }
+    // Encode the pcm data, storing it in the music_process struct so it is valid on write
 }
 
 void discord::voice_state_listener::send_audio(voice_gateway_entry &entry)
 {
-    if (!entry.process->frames.empty()) {
-        if (entry.state == voice_gateway_entry::gateway_state::playing) {
-            std::lock_guard<std::mutex> guard(entry.process->mutex);
-
-            entry.process->current_frame = entry.process->frames.front();
-            entry.process->frames.pop_front();
-            auto &frame = entry.process->current_frame;
-
+    bool more_frames_to_send = false;
+    if (more_frames_to_send) {
+        if (entry.state == voice_gateway_entry::state::playing) {
             // Next timer expires after frame_size / 48000 seconds, or frame_size / 48 ms
-            entry.process->timer.expires_from_now(
-                boost::posix_time::milliseconds(frame.frame_size / 48));
+            // entry.process->timer.expires_from_now(
+            //    boost::posix_time::milliseconds(frame.frame_size / 48));
 
             // Play the frame
-            entry.gateway->play(frame.encoded_data.data(), frame.encoded_data.size(),
-                                frame.frame_size);
+            // entry.gateway->play();
 
             // Enqueue wait for the frame to send
             entry.process->timer.async_wait([&](const boost::system::error_code &e) {
-                if (!e && entry.state == voice_gateway_entry::gateway_state::playing) {
+                if (!e && entry.state == voice_gateway_entry::state::playing) {
                     send_audio(entry);
                 }
             });
         }
-    } else if(entry.state == voice_gateway_entry::gateway_state::playing) {
+    } else if (entry.state == voice_gateway_entry::state::playing) {
         // If we are still in the playing state and there are no more frames to read,
         // play the next entry
         std::cout << "Sound clip finished\n";
-        entry.state = voice_gateway_entry::gateway_state::connected;
+        entry.state = voice_gateway_entry::state::connected;
         play(entry);
     }
-}
-
-void discord::music_process::close_pipes()
-{
-    if (audio_transport.is_open()) {
-        std::cout << "Closing audio transport\n";
-        audio_transport.close();
-    }
-    if (pcm_source.is_open()) {
-        std::cout << "Closing pcm source\n";
-        pcm_source.close();
-    }
-}
-
-void discord::music_process::new_pipes()
-{
-    close_pipes();
-    audio_transport = boost::process::pipe{};
-    std::cout << "Assigned new audio transport pipe\n";
-    pcm_source = boost::process::async_pipe{ctx};
-    std::cout << "Assigned new pcm source\n";
-}
-
-void discord::music_process::kill()
-{
-    youtube_dl.terminate();
-    ffmpeg.terminate();
-}
-
-void discord::music_process::wait()
-{
-    youtube_dl.wait();
-    ffmpeg.wait();
 }

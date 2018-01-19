@@ -27,12 +27,19 @@ discord::gateway::gateway(boost::asio::io_context &ctx, const std::string &token
 
     // Establish the WebSocket connection
     websock.async_connect("wss://gateway.discord.gg/?v=6&encoding=json", resolver,
-                          [&](const boost::system::error_code &e, size_t transferred) {
-                              on_connect(e, transferred);
-                          });
+                          [&](auto &ec, auto transferred) { on_connect(ec, transferred); });
 }
 
 discord::gateway::~gateway() {}
+
+void discord::gateway::on_connect(const boost::system::error_code &e, size_t)
+{
+    if (e) {
+        throw std::runtime_error("Could not connect: " + e.message());
+    }
+    std::cout << "Connected! Sending identify\n";
+    identify();
+}
 
 void discord::gateway::add_listener(const std::string &event_name, const std::string &handler_name,
                                     event_listener::ptr h)
@@ -74,6 +81,7 @@ void discord::gateway::identify()
            {{"$os", "linux"}, {"$browser", "cmd-discord"}, {"$device", "cmd-discord"}}},
           {"compress", compress},
           {"large_threshold", large_threshold}}}};
+
     auto callback = [&](const boost::system::error_code &e, size_t) {
         if (e) {
             std::cerr << "Identify send error: " << e.message() << "\n";
@@ -99,7 +107,7 @@ void discord::gateway::resume()
         throw std::runtime_error("Could not resume previous session: no such session");
 
     // Close the previous connection and create a new websocket
-    websock.close(websocket_status_code::going_away);
+    websock.close(websocket::status_code::going_away);
     //    websock.connect("wss://gateway.discord.gg/?v=6&encoding=json");
 
     nlohmann::json resume_payload{
@@ -121,18 +129,14 @@ const std::string &discord::gateway::get_session_id() const
 void discord::gateway::run_public_dispatch(gtw_op_recv op, nlohmann::json &data,
                                            const std::string &t)
 {
-    auto range = event_name_to_handler_name.equal_range(t);
-    for (auto it = range.first; it != range.second; ++it) {
-        auto handler = handler_name_to_handler_ptr.find(it->second);
-        if (handler != handler_name_to_handler_ptr.end())
-            handler->second->handle(*this, op, data, t);
-    }
-    // Run all event listeners subscribing to 'ALL'
-    auto range_all = event_name_to_handler_name.equal_range("ALL");
-    for (auto it = range_all.first; it != range_all.second; ++it) {
-        auto handler = handler_name_to_handler_ptr.find(it->second);
-        if (handler != handler_name_to_handler_ptr.end())
-            handler->second->handle(*this, op, data, t);
+    std::string events[] = {t, "ALL"};
+    for (auto &event : events) {
+        auto range = event_name_to_handler_name.equal_range(event);
+        for (auto it = range.first; it != range.second; ++it) {
+            auto handler = handler_name_to_handler_ptr.find(it->second);
+            if (handler != handler_name_to_handler_ptr.end())
+                handler->second->handle(*this, op, data, t);
+        }
     }
 }
 
@@ -141,15 +145,6 @@ void discord::gateway::run_gateway_dispatch(nlohmann::json &data, const std::str
     auto event_it = gateway_event_map.find(event_name);
     if (event_it != gateway_event_map.end())
         event_it->second(data);
-}
-
-void discord::gateway::on_connect(const boost::system::error_code &e, size_t)
-{
-    if (e) {
-        throw std::runtime_error("Could not connect: " + e.message());
-    }
-    std::cout << "Connected! Sending identify\n";
-    identify();
 }
 
 void discord::gateway::on_ready(nlohmann::json &data)
@@ -185,9 +180,9 @@ void discord::gateway::event_loop()
     websock.async_next_message([&](const boost::system::error_code &e, const uint8_t *data,
                                    size_t len) {
         if (e) {
-            if (e == make_error_code(websocket_error::websocket_connection_closed)) {
+            if (e == websocket::error::websocket_connection_closed) {
                 // Convert the close code to a gateway error message
-                auto ec = make_error_code(static_cast<gateway_error>(websock.close_code()));
+                auto ec = make_error_code(static_cast<gateway::error>(websock.close_code()));
                 throw std::runtime_error(ec.message());
             }
             throw std::runtime_error("There was an error: " + e.message());
@@ -261,13 +256,53 @@ void discord::gateway::event_loop()
     });
 }
 
-const boost::system::error_category &gateway_category()
+const char *discord::gateway::error_category::name() const noexcept
 {
-    static discord::gateway_error_category instance;
+    return "gateway";
+}
+
+std::string discord::gateway::error_category::message(int ev) const noexcept
+{
+    switch (error(ev)) {
+        case error::unknown_error:
+            return "unknown error";
+        case error::unknown_opcode:
+            return "invalid opcode";
+        case error::decode_error:
+            return "decode error";
+        case error::not_authenticated:
+            return "sent payload before identified";
+        case error::authentication_failed:
+            return "incorrect token in identify payload";
+        case error::already_authenticated:
+            return "sent more than one identify payload";
+        case error::invalid_seq:
+            return "invalid sequence number";
+        case error::rate_limited:
+            return "rate limited";
+        case error::session_timeout:
+            return "session has timed out";
+        case error::invalid_shard:
+            return "invalid shard";
+        case error::sharding_required:
+            return "sharding required";
+    }
+    return "Unknown gateway error";
+}
+
+bool discord::gateway::error_category::equivalent(const boost::system::error_code &code,
+                                                  int condition) const noexcept
+{
+    return &code.category() == this && static_cast<int>(code.value()) == condition;
+}
+
+const boost::system::error_category &discord::gateway::error_category::instance()
+{
+    static discord::gateway::error_category instance;
     return instance;
 }
 
-boost::system::error_code make_error_code(discord::gateway_error code) noexcept
+boost::system::error_code make_error_code(discord::gateway::error code) noexcept
 {
-    return boost::system::error_code{(int) code, gateway_category()};
+    return boost::system::error_code{(int) code, discord::gateway::error_category::instance()};
 }

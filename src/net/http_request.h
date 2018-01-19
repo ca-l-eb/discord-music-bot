@@ -1,9 +1,9 @@
 #ifndef ASIO_HTTP_REQUEST_H
 #define ASIO_HTTP_REQUEST_H
 
+#include <net/http_response.h>
 #include <boost/asio.hpp>
 #include <string>
-#include <net/http_response.h>
 
 class http_request
 {

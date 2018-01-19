@@ -17,7 +17,6 @@ struct member {
 bool operator<(const member &lhs, const member &rhs);
 void to_json(nlohmann::json &json, const discord::member &m);
 void from_json(const nlohmann::json &json, discord::member &m);
-
 }
 
 #endif

@@ -15,38 +15,14 @@ namespace discord
 {
 class voice_gateway;
 
-struct music_frame {
-    std::vector<uint8_t> encoded_data;
-    uint16_t frame_size;
-
-    music_frame(std::vector<uint8_t> &&d, uint16_t frame_size)
-        : encoded_data{d}, frame_size{frame_size}
-    {
-    }
-    music_frame() = default;
-};
-
 struct music_process {
     boost::asio::io_context &ctx;
     boost::process::child youtube_dl;
-    boost::process::child ffmpeg;
-    boost::process::pipe audio_transport;
-    boost::process::async_pipe pcm_source;
+    boost::process::async_pipe pipe;
     boost::asio::deadline_timer timer;
-    boost::asio::streambuf buffer;
-    std::deque<music_frame> frames;
-    std::mutex mutex;
     discord::opus_encoder encoder{2, 48000};
-    music_frame current_frame;
 
-    music_process(boost::asio::io_context &ctx)
-        : ctx{ctx}, pcm_source{ctx}, timer{ctx}
-    {
-    }
-    void close_pipes();
-    void new_pipes();
-    void kill();
-    void wait();
+    music_process(boost::asio::io_context &ctx) : ctx{ctx}, pipe{ctx}, timer{ctx} {}
 };
 
 struct voice_gateway_entry {
@@ -56,7 +32,7 @@ struct voice_gateway_entry {
     std::string token;
     std::string endpoint;
     std::unique_ptr<discord::voice_gateway> gateway;
-    enum class gateway_state { disconnected, connected, playing, paused } state;
+    enum class state { disconnected, connected, playing, paused } state;
     std::deque<std::string> music_queue;
     std::unique_ptr<music_process> process;
 };
@@ -81,7 +57,7 @@ private:
     void voice_state_update(const nlohmann::json &data);
     void voice_server_update(const nlohmann::json &data);
     void message_create(const nlohmann::json &data);
-    
+
     void join_voice_server(const std::string &guild_id, const std::string &channel_id);
     void leave_voice_server(const std::string &guild_id);
     void check_command(const std::string &content, const nlohmann::json &data);

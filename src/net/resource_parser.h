@@ -3,14 +3,15 @@
 
 #include <string>
 
-namespace resource_parser{
-    struct parsed_url {
-        std::string protocol;
-        std::string host;
-        int port;
-        std::string resource;
-    };
-    parsed_url parse(const std::string &url);
+namespace resource_parser
+{
+struct parsed_url {
+    std::string protocol;
+    std::string host;
+    int port;
+    std::string resource;
+};
+parsed_url parse(const std::string &url);
 }
 
 #endif
