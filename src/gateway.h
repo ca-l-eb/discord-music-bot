@@ -84,19 +84,11 @@ private:
     void on_connect(const boost::system::error_code &e);
     void on_ready(nlohmann::json &data);
     void event_loop();
-
-    transfer_cb ignore_send = [](const boost::system::error_code &, size_t) {};
-    transfer_cb print_info_send = [](const boost::system::error_code &e, size_t transferred) {
-        if (e) {
-            std::cerr << "Message send error: " << e.message() << "\n";
-        } else {
-            std::cout << "Sent " << transferred << " bytes\n";
-        }
-    };
 };
-}
 
 boost::system::error_code make_error_code(discord::gateway::error code) noexcept;
+
+}
 
 template<>
 struct boost::system::is_error_code_enum<discord::gateway::error> : public boost::true_type {

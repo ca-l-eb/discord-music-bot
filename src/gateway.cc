@@ -68,7 +68,7 @@ void discord::gateway::send(const std::string &s, transfer_cb c)
 void discord::gateway::heartbeat()
 {
     nlohmann::json json{{"op", static_cast<int>(gtw_op_send::heartbeat)}, {"d", seq_num}};
-    send(json.dump(), print_info_send);
+    send(json.dump(), print_transfer_info);
 }
 
 void discord::gateway::identify()
@@ -113,7 +113,7 @@ void discord::gateway::resume()
     nlohmann::json resume_payload{
         {"op", static_cast<int>(gtw_op_send::resume)},
         {"d", {{"token", token}, {"session_id", session_id}, {"seq", seq_num}}}};
-    send(resume_payload.dump(), print_info_send);
+    send(resume_payload.dump(), print_transfer_info);
 }
 
 const std::string &discord::gateway::get_user_id() const
@@ -302,7 +302,7 @@ const boost::system::error_category &discord::gateway::error_category::instance(
     return instance;
 }
 
-boost::system::error_code make_error_code(discord::gateway::error code) noexcept
+boost::system::error_code discord::make_error_code(discord::gateway::error code) noexcept
 {
-    return boost::system::error_code{(int) code, discord::gateway::error_category::instance()};
+    return {(int) code, discord::gateway::error_category::instance()};
 }

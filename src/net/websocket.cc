@@ -578,5 +578,5 @@ const boost::system::error_category &websocket::error_category::instance()
 
 boost::system::error_code make_error_code(websocket::error code) noexcept
 {
-    return boost::system::error_code{(int) code, websocket::error_category::instance()};
+    return {(int) code, websocket::error_category::instance()};
 }

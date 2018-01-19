@@ -77,7 +77,7 @@ private:
     int retries;
     bool is_speaking;
 
-    error_cb callback;
+    error_cb voice_connect_callback;
 
     void start_speaking(transfer_cb c);
     void stop_speaking(transfer_cb c);
@@ -85,6 +85,7 @@ private:
     void identify();
     void resume();
     void event_loop();
+    void handle_event(const uint8_t *data, size_t len);
     void on_connect(const boost::system::error_code &e);
     void extract_ready_info(nlohmann::json &data);
     void extract_session_info(nlohmann::json &data);
@@ -92,19 +93,11 @@ private:
     void send_ip_discovery_datagram();
     void notify_heartbeater_hello(nlohmann::json &data);
     void select(uint16_t local_udp_port);
-    void write_header(unsigned char *buffer, uint16_t seq_num, uint32_t timestamp);
-
-    transfer_cb print_info = [](const boost::system::error_code &e, size_t transferred) {
-        if (e) {
-            std::cerr << "Voice gateway send error: " << e.message() << "\n";
-        } else {
-            std::cout << "Voice gateway sent " << transferred << " bytes\n";
-        }
-    };
 };
-}
 
 boost::system::error_code make_error_code(discord::voice_gateway::error code) noexcept;
+
+}
 
 template<>
 struct boost::system::is_error_code_enum<discord::voice_gateway::error> : public boost::true_type {

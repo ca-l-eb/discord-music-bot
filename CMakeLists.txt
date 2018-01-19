@@ -12,6 +12,7 @@ find_package(Boost 1.4 COMPONENTS system REQUIRED)
 
 set(SOURCE_FILES
         src/api.cc
+        src/callbacks.cc
         src/delayed_message_sender.cc
         src/discord/channel.cc
         src/discord/guild.cc
@@ -36,6 +37,7 @@ set(SOURCE_FILES
 
 set(HEADER_FILES
         src/api.h
+        src/callbacks.h
         src/delayed_message_sender
         src/discord/channel.h
         src/discord/guild.h

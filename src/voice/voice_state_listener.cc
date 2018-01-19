@@ -295,13 +295,7 @@ void discord::voice_state_listener::join_voice_server(const std::string &guild_i
                           {"channel_id", channel_id},
                           {"self_mute", false},
                           {"self_deaf", false}}}};
-    gateway.send(json.dump(), [](const boost::system::error_code &e, size_t transferred) {
-        if (e) {
-            std::cerr << "voice state listener send error: " << e.message() << "\n";
-        } else {
-            std::cout << "voice state listener sent " << transferred << " bytes\n";
-        }
-    });
+    gateway.send(json.dump(), print_transfer_info);
 }
 
 void discord::voice_state_listener::leave_voice_server(const std::string &guild_id)
@@ -312,13 +306,7 @@ void discord::voice_state_listener::leave_voice_server(const std::string &guild_
                           {"channel_id", nullptr},
                           {"self_mute", false},
                           {"self_deaf", false}}}};
-    gateway.send(json.dump(), [](const boost::system::error_code &e, size_t transferred) {
-        if (e) {
-            std::cerr << "voice state listener send error: " << e.message() << "\n";
-        } else {
-            std::cout << "voice state listener sent " << transferred << " bytes\n";
-        }
-    });
+    gateway.send(json.dump(), print_transfer_info);
 }
 
 void discord::voice_state_listener::play(voice_gateway_entry &entry)
