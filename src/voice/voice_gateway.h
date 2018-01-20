@@ -96,7 +96,6 @@ private:
 };
 
 boost::system::error_code make_error_code(discord::voice_gateway::error code) noexcept;
-
 }
 
 template<>

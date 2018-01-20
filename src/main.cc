@@ -7,6 +7,7 @@
 #include <events/echo_listener.h>
 #include <events/hello_responder.h>
 #include <gateway.h>
+#include <voice/decoding.h>
 
 int main(int argc, char *argv[])
 {
@@ -21,6 +22,8 @@ int main(int argc, char *argv[])
             std::cerr << "Invalid token. Token should be 59 characters long\n";
             return EXIT_FAILURE;
         }
+
+        av_register_all();  // Initialize libavformat
 
         boost::asio::io_context ctx;
         boost::asio::ip::tcp::resolver resolver{ctx};

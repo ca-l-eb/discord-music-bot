@@ -10,6 +10,7 @@
 #include <api.h>
 #include <callbacks.h>
 #include <delayed_message_sender.h>
+#include <discord.h>
 #include <events/event_listener.h>
 #include <gateway_store.h>
 #include <heartbeater.h>
@@ -77,7 +78,7 @@ private:
     const int large_threshold = 250;
     enum class connection_state { disconnected, connected } state;
 
-    void run_public_dispatch(gtw_op_recv op, nlohmann::json &data, const std::string &t);
+    void run_public_dispatch(gateway_op op, nlohmann::json &data, const std::string &t);
     void run_gateway_dispatch(nlohmann::json &data, const std::string &event_name);
     void identify();
     void resume();
@@ -87,7 +88,6 @@ private:
 };
 
 boost::system::error_code make_error_code(discord::gateway::error code) noexcept;
-
 }
 
 template<>

@@ -4,7 +4,7 @@
 
 discord::hello_responder::hello_responder(discord::api &api) : api{api} {}
 
-void discord::hello_responder::handle(discord::gateway &, gtw_op_recv, const nlohmann::json &json,
+void discord::hello_responder::handle(discord::gateway &, gateway_op, const nlohmann::json &json,
                                       const std::string &type)
 {
     if (json.is_null())

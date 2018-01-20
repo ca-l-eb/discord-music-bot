@@ -34,7 +34,7 @@ void discord::delayed_message_sender::async_wait_for_timer_then_send()
     send_timer.async_wait([&](const boost::system::error_code &e) {
         if (e) {
             // TODO: handler error or cancelled timer
-            std::cerr << "Timer error: " << e.message() << "\n";
+            std::cerr << "timer error: " << e.message() << "\n";
         } else {
             // Wrap the handler with timer_strand to make sure it doesn't corrupt the queue if this
             // is multithreaded in the future.
@@ -58,7 +58,7 @@ void discord::delayed_message_sender::packet_send_done(const boost::system::erro
 
     // If there wasn't an error, try to send the next packet if it exists
     if (e) {
-        std::cerr << "Delayed_message_sender receive error: " << e.message() << "\n";
+        std::cerr << "delayed_message_sender receive error: " << e.message() << "\n";
     } else {
         if (!write_queue.empty()) {
             async_wait_for_timer_then_send();

@@ -18,7 +18,7 @@ void discord::heartbeater::on_hello(const nlohmann::json &data)
     if (!data.is_null()) {
         if (data["heartbeat_interval"].is_number()) {
             heartbeat_interval = data["heartbeat_interval"].get<int>();
-            std::cout << "Heartbeating every " << heartbeat_interval << " ms\n";
+            std::cout << "heartbeating every " << heartbeat_interval << " ms\n";
             // Cancel any previous timer waiting, before resuming with new heartbeat_interval
             timer.cancel();
             start_heartbeat_timer();

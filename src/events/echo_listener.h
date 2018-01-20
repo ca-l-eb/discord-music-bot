@@ -6,7 +6,7 @@
 namespace discord
 {
 struct echo_listener : public event_listener {
-    void handle(discord::gateway &, gtw_op_recv, const nlohmann::json &json,
+    void handle(discord::gateway &, gateway_op, const nlohmann::json &json,
                 const std::string &type) override;
 };
 }

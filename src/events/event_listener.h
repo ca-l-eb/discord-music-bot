@@ -6,7 +6,7 @@
 #include <thread>
 
 #include <api.h>
-#include <opcodes.h>
+#include <discord.h>
 #include <json.hpp>
 
 namespace discord
@@ -15,7 +15,7 @@ class gateway;
 
 struct event_listener {
     using ptr = std::shared_ptr<event_listener>;
-    virtual void handle(discord::gateway &gateway, gtw_op_recv, const nlohmann::json &,
+    virtual void handle(discord::gateway &gateway, gateway_op, const nlohmann::json &,
                         const std::string &) = 0;
 };
 }

@@ -9,6 +9,7 @@
 
 #include <events/event_listener.h>
 #include <gateway.h>
+#include <voice/decoding.h>
 #include <voice/opus_encoder.h>
 
 namespace discord
@@ -22,6 +23,14 @@ struct music_process {
     boost::asio::deadline_timer timer;
     discord::opus_encoder encoder{2, 48000};
 
+    // Holds the entire contents of an audio file in some format
+    std::vector<uint8_t> audio_file_data;
+    std::array<uint8_t, 4096> buffer;
+
+    std::unique_ptr<avio_info> avio;
+    std::unique_ptr<audio_decoder> decoder;
+    std::unique_ptr<audio_resampler> resampler;
+
     music_process(boost::asio::io_context &ctx) : ctx{ctx}, pipe{ctx}, timer{ctx} {}
 };
 
@@ -31,10 +40,12 @@ struct voice_gateway_entry {
     std::string session_id;
     std::string token;
     std::string endpoint;
-    std::unique_ptr<discord::voice_gateway> gateway;
+
     enum class state { disconnected, connected, playing, paused } state;
+
     std::deque<std::string> music_queue;
     std::unique_ptr<music_process> process;
+    std::unique_ptr<discord::voice_gateway> gateway;
 };
 
 class voice_state_listener : public event_listener
@@ -43,7 +54,7 @@ public:
     voice_state_listener(boost::asio::io_context &ctx, discord::gateway &gateway,
                          discord::gateway_store &store);
     ~voice_state_listener();
-    void handle(discord::gateway &gateway, gtw_op_recv, const nlohmann::json &json,
+    void handle(discord::gateway &gateway, gateway_op, const nlohmann::json &json,
                 const std::string &type) override;
 
 private:
@@ -74,7 +85,7 @@ private:
     void read_from_pipe(const boost::system::error_code &e, size_t transferred,
                         voice_gateway_entry &entry);
     void send_audio(voice_gateway_entry &entry);
-    void encode_audio(voice_gateway_entry &entry);
+    int encode_audio(music_process &m, int16_t *pcm, int frame_count);
 };
 }
 

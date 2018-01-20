@@ -7,6 +7,35 @@
 
 namespace discord
 {
+enum class gateway_op {
+    dispatch = 0,
+    heartbeat = 1,
+    identify = 2,
+    status_update = 3,
+    voice_state_update = 4,
+    voice_server_ping = 5,
+    resume = 6,
+    reconnect = 7,
+    request_guild_members = 8,
+    invalid_session = 9,
+    hello = 10,
+    heartbeat_ack = 11
+};
+
+enum class voice_op {
+    identify = 0,
+    select_proto = 1,
+    ready = 2,
+    heartbeat = 3,
+    session_description = 4,
+    speaking = 5,
+    heartbeat_ack = 6,
+    resume = 7,
+    hello = 8,
+    resumed = 9,
+    client_disconnect = 13
+};
+
 struct channel {
     enum class channel_type {
         guild_text = 0,
@@ -58,7 +87,6 @@ void from_json(const nlohmann::json &json, discord::member &m);
 bool operator<(const guild &lhs, const guild &rhs);
 void to_json(nlohmann::json &json, const discord::guild &g);
 void from_json(const nlohmann::json &json, discord::guild &g);
-
 }
 
 #endif

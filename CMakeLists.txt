@@ -51,7 +51,6 @@ set(HEADER_FILES
         src/net/resource_parser.h
         src/net/send_queue.h
         src/net/websocket.h
-        src/opcodes.h
         src/voice/crypto.h
         src/voice/decoding.h
         src/voice/opus_encoder.h

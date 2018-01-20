@@ -37,7 +37,7 @@ void discord::gateway::on_connect(const boost::system::error_code &e)
     if (e) {
         throw std::runtime_error("Could not connect: " + e.message());
     }
-    std::cout << "Connected! Sending identify\n";
+    std::cout << "[guild] connected! sending identify\n";
     identify();
 }
 
@@ -67,14 +67,14 @@ void discord::gateway::send(const std::string &s, transfer_cb c)
 
 void discord::gateway::heartbeat()
 {
-    nlohmann::json json{{"op", static_cast<int>(gtw_op_send::heartbeat)}, {"d", seq_num}};
-    send(json.dump(), print_transfer_info);
+    nlohmann::json json{{"op", static_cast<int>(gateway_op::heartbeat)}, {"d", seq_num}};
+    send(json.dump(), ignore_transfer);
 }
 
 void discord::gateway::identify()
 {
     nlohmann::json identify_payload{
-        {"op", static_cast<int>(gtw_op_send::identify)},
+        {"op", static_cast<int>(gateway_op::identify)},
         {"d",
          {{"token", token},
           {"properties",
@@ -84,9 +84,9 @@ void discord::gateway::identify()
 
     auto callback = [&](const boost::system::error_code &e, size_t) {
         if (e) {
-            std::cerr << "Identify send error: " << e.message() << "\n";
+            std::cerr << "[guild] identify send error: " << e.message() << "\n";
         } else {
-            std::cout << "Sucessfully sent identify payload... Beginning event loop\n";
+            std::cout << "[guild] sucessfully sent identify payload... beginning event loop\n";
 
             // Create heartbeater for this gateway
             beater = std::make_unique<discord::heartbeater>(ctx, *this);
@@ -111,9 +111,9 @@ void discord::gateway::resume()
     //    websock.connect("wss://gateway.discord.gg/?v=6&encoding=json");
 
     nlohmann::json resume_payload{
-        {"op", static_cast<int>(gtw_op_send::resume)},
+        {"op", static_cast<int>(gateway_op::resume)},
         {"d", {{"token", token}, {"session_id", session_id}, {"seq", seq_num}}}};
-    send(resume_payload.dump(), print_transfer_info);
+    send(resume_payload.dump(), ignore_transfer);
 }
 
 const std::string &discord::gateway::get_user_id() const
@@ -126,7 +126,7 @@ const std::string &discord::gateway::get_session_id() const
     return session_id;
 }
 
-void discord::gateway::run_public_dispatch(gtw_op_recv op, nlohmann::json &data,
+void discord::gateway::run_public_dispatch(gateway_op op, nlohmann::json &data,
                                            const std::string &t)
 {
     std::string events[] = {t, "ALL"};
@@ -189,7 +189,7 @@ void discord::gateway::event_loop()
         }
         const char *start = reinterpret_cast<const char *>(data);
         const char *end = start + len;
-        std::cout << "Gateway received: ";
+        std::cout << "[guild] ";
         std::cout.write(start, len);
         std::cout << "\n";
         try {
@@ -210,21 +210,21 @@ void discord::gateway::event_loop()
                     // TODO: Ignore messages that are sent by this bot (user_id)
                 }
 
-                auto gateway_op = static_cast<gtw_op_recv>(op_val);
+                auto gateway_op = static_cast<enum gateway_op>(op_val);
                 switch (gateway_op) {
-                    case gtw_op_recv::dispatch:
+                    case gateway_op::dispatch:
                         run_public_dispatch(gateway_op, event_data, event_name);
                         run_gateway_dispatch(event_data, event_name);
                         break;
-                    case gtw_op_recv::heartbeat:
+                    case gateway_op::heartbeat:
                         heartbeat();  // Respond to heartbeats with a heartbeat
                         break;
-                    case gtw_op_recv::reconnect:
+                    case gateway_op::reconnect:
                         // We are asked to reconnect, i.e. we are disconnected
                         state = connection_state::disconnected;
                         resume();
                         break;
-                    case gtw_op_recv::invalid_session:
+                    case gateway_op::invalid_session:
                         if (state == connection_state::disconnected) {
                             throw std::runtime_error("Could not connect to Discord Gateway");
                         } else {
@@ -237,10 +237,10 @@ void discord::gateway::event_loop()
                                 throw std::runtime_error("disconnected");
                         }
                         break;
-                    case gtw_op_recv::hello:
+                    case gateway_op::hello:
                         beater->on_hello(event_data);
                         break;
-                    case gtw_op_recv::heartbeat_ack:
+                    case gateway_op::heartbeat_ack:
                         beater->on_heartbeat_ack();
                         break;
                     default:

@@ -7,7 +7,7 @@ namespace discord
 {
 struct hello_responder : public event_listener {
     explicit hello_responder(discord::api &api);
-    void handle(discord::gateway &, gtw_op_recv, const nlohmann::json &json,
+    void handle(discord::gateway &, gateway_op, const nlohmann::json &json,
                 const std::string &type) override;
 
 private:
