@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
+#include <discord.h>
 #include <gateway_store.h>
-#include <discord/guild.h>
 #include <fstream>
 #include <iostream>
 

@@ -6,7 +6,7 @@
 #include <set>
 #include <string>
 
-#include <discord/guild.h>
+#include <discord.h>
 
 namespace discord
 {

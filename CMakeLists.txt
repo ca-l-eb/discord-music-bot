@@ -9,15 +9,14 @@ add_subdirectory(test)
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(Boost 1.4 COMPONENTS system REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(FFMPEG REQUIRED libavutil libswresample libavcodec libavformat)
 
 set(SOURCE_FILES
         src/api.cc
         src/callbacks.cc
         src/delayed_message_sender.cc
-        src/discord/channel.cc
-        src/discord/guild.cc
-        src/discord/member.cc
-        src/discord/user.cc
+        src/discord.cc
         src/events/echo_listener.cc
         src/events/hello_responder.cc
         src/gateway.cc
@@ -29,6 +28,7 @@ set(SOURCE_FILES
         src/net/send_queue.cc
         src/net/websocket.cc
         src/voice/crypto.cc
+        src/voice/decoding.cc
         src/voice/opus_encoder.cc
         src/voice/voice_gateway.cc
         src/voice/voice_state_listener.cc
@@ -39,10 +39,7 @@ set(HEADER_FILES
         src/api.h
         src/callbacks.h
         src/delayed_message_sender
-        src/discord/channel.h
-        src/discord/guild.h
-        src/discord/member.h
-        src/discord/user.h
+        src/discord.h
         src/events/echo_listener.h
         src/events/event_listener.h
         src/events/hello_responder.h
@@ -56,6 +53,7 @@ set(HEADER_FILES
         src/net/websocket.h
         src/opcodes.h
         src/voice/crypto.h
+        src/voice/decoding.h
         src/voice/opus_encoder.h
         src/voice/voice_gateway.h
         src/voice/voice_state_listener.h
@@ -63,5 +61,5 @@ set(HEADER_FILES
         )
 
 add_executable(discord src/main.cc ${SOURCE_FILES} ${HEADER_FILES})
-target_link_libraries(discord ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES} ${OPENSSL_LIBRARIES} opus sodium)
+target_link_libraries(discord ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES} ${OPENSSL_LIBRARIES} ${FFMPEG_LIBRARIES} opus sodium)
 target_include_directories(discord PUBLIC ${CMAKE_SOURCE_DIR}/src)
