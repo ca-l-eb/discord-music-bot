@@ -7,7 +7,7 @@ void discord::gateway_store::parse_guild(const nlohmann::json &json)
 
         for (auto &channel : g.channels)
             channels_to_guild[channel.id] = g.id;
-        
+
         for (auto &member : g.members)
             user_to_guilds.insert({member.user.id, g.id});
 

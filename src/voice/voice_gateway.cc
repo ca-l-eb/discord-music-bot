@@ -372,7 +372,8 @@ void discord::voice_gateway::send_audio(audio_frame frame)
     // Make sure we also count the RTP header and the MAC from encrypting
     frame.encoded_len += 12 + crypto_secretbox_MACBYTES;
 
-    socket.async_send_to(boost::asio::buffer(buf, frame.encoded_len), send_endpoint, ignore_transfer);
+    socket.async_send_to(boost::asio::buffer(buf, frame.encoded_len), send_endpoint,
+                         ignore_transfer);
     std::cout << "[RTP] " << frame.encoded_len << " bytes sent\r";
 }
 

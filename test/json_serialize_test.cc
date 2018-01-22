@@ -28,7 +28,7 @@ TEST(Guild, GuildFromJson)
         if (json.is_null())
             FAIL();
         discord::guild guild = json["d"];
-        ASSERT_EQ("147536581748588544", guild.owner);
+        ASSERT_EQ(147536581748588544, guild.owner);
         ASSERT_EQ("Super Fun Time", guild.name);
         ASSERT_EQ(39, guild.members.size());
         ASSERT_EQ(16, guild.channels.size());
@@ -57,17 +57,16 @@ TEST(GatewayStore, LoadStore)
         store.parse_guild(json1["d"]);
         store.parse_guild(json2["d"]);
         
-        std::string s = store.lookup_channel("bad channel id");
-        EXPECT_EQ(0, s.size());
+        auto s = store.lookup_channel(1);
+        EXPECT_EQ(0, s);
         
         // Lookup a channel id in the store structure, in this case they are the same id
-        std::string guild_id = store.lookup_channel("312472384026181632");
-        EXPECT_EQ("312472384026181632", guild_id);
+        auto guild_id = store.lookup_channel(312472384026181632);
+        EXPECT_EQ(312472384026181632, guild_id);
         
         // Same thing but with a different channel, this time with a different id
-        guild_id = store.lookup_channel("312472384026181633");
-        EXPECT_EQ("312472384026181632", guild_id);
-        
+        guild_id = store.lookup_channel(312472384026181633);
+        EXPECT_EQ(312472384026181632, guild_id);
     } catch (std::exception &e) {
         std::cerr << e.what() << "\n";
         FAIL();

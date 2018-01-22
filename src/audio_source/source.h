@@ -1,6 +1,8 @@
 #ifndef CMD_AUDIO_SOURCE_H
 #define CMD_AUDIO_SOURCE_H
 
+#include <callbacks.h>
+
 struct audio_frame {
     unsigned char *opus_encoded_data;
     int encoded_len;
@@ -8,8 +10,7 @@ struct audio_frame {
 };
 
 struct audio_source {
-    audio_frame next();
+    virtual audio_frame next() = 0;
 };
 
 #endif
-

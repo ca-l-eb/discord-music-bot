@@ -95,7 +95,7 @@ struct message {
 };
 
 struct voice_state {
-    uint64_t guild_id; // server_id in docs
+    uint64_t guild_id;  // server_id in docs
     uint64_t channel_id;
     uint64_t user_id;
     std::string session_id;
@@ -146,7 +146,8 @@ void from_json(const nlohmann::json &json, discord::voice_payload &vp);
 void from_json(const nlohmann::json &json, discord::voice_ready &vr);
 void from_json(const nlohmann::json &json, discord::voice_session &vs);
 
-namespace event {
+namespace event
+{
 struct hello {
     int heartbeat_interval;
 };
@@ -166,7 +167,6 @@ struct voice_server_update {
 void from_json(const nlohmann::json &json, discord::event::hello &h);
 void from_json(const nlohmann::json &json, discord::event::ready &r);
 void from_json(const nlohmann::json &json, discord::event::voice_server_update &v);
-
 }
 }
 

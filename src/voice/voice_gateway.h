@@ -49,7 +49,7 @@ public:
     void heartbeat() override;
     void send(const std::string &s, transfer_cb c);
     void connect(boost::asio::ip::tcp::resolver &resolver, error_cb c);
-    void play(const uint8_t *opus_encoded, size_t encoded_len, size_t frame_size);
+    void play(audio_frame frame);
     void stop();
 
 private:

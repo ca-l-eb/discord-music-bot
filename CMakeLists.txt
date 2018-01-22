@@ -14,6 +14,7 @@ pkg_check_modules(FFMPEG REQUIRED libavutil libswresample libavcodec libavformat
 
 set(SOURCE_FILES
         src/api.cc
+        src/audio_source/youtube_dl.cc
         src/callbacks.cc
         src/delayed_message_sender.cc
         src/discord.cc
@@ -37,6 +38,8 @@ set(SOURCE_FILES
 
 set(HEADER_FILES
         src/api.h
+        src/audio_source/source.h
+        src/audio_source/youtube_dl.h
         src/callbacks.h
         src/delayed_message_sender
         src/discord.h

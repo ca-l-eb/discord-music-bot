@@ -3,15 +3,9 @@
 #include <iostream>
 #include <regex>
 
+#include <audio_source/youtube_dl.h>
 #include <net/resource_parser.h>
 #include <voice/voice_state_listener.h>
-
-static void stop_process(discord::music_process &process)
-{
-    process.timer.cancel();
-    process.pipe.close();
-    process.youtube_dl.terminate();
-}
 
 static discord::guild *get_guild_from_channel(uint64_t channel_id, discord::gateway_store &store)
 {
@@ -54,10 +48,10 @@ void discord::voice_state_listener::voice_state_update(const nlohmann::json &dat
     }
 
     // Create the entry if it doesn't exist
-    auto it = voice_gateways.find(state.guild_id);
-    if (it == voice_gateways.end()) {
-        voice_gateways[state.guild_id] = {};
+    if (voice_gateways.count(state.guild_id) == 0) {
+        voice_gateways.insert({state.guild_id, voice_gateway_entry{}});
     }
+
     auto &entry = voice_gateways[state.guild_id];
     entry.channel_id = state.channel_id;
     entry.guild_id = state.guild_id;
@@ -168,10 +162,6 @@ void discord::voice_state_listener::do_leave(discord::voice_gateway_entry &entry
     if (entry.p_state != voice_gateway_entry::state::disconnected) {
         entry.p_state = voice_gateway_entry::state::disconnected;
         entry.music_queue.clear();
-
-        if (entry.process) {
-            stop_process(*entry.process);
-        }
         leave_voice_server(entry.guild_id);
     }
 }
@@ -192,9 +182,7 @@ void discord::voice_state_listener::do_skip(discord::voice_gateway_entry &entry)
     if (entry.p_state == voice_gateway_entry::state::playing ||
         entry.p_state == voice_gateway_entry::state::paused) {
         entry.p_state = voice_gateway_entry::state::connected;
-        if (entry.process) {
-            stop_process(*entry.process);
-        }
+
         if (!entry.music_queue.empty())
             do_play(entry);
         else
@@ -204,10 +192,6 @@ void discord::voice_state_listener::do_skip(discord::voice_gateway_entry &entry)
 
 void discord::voice_state_listener::do_play(discord::voice_gateway_entry &entry)
 {
-    // Create a music process if there is not already one for this guild
-    if (!entry.process)
-        entry.process = std::make_unique<discord::music_process>(ctx);
-
     if (!entry.music_queue.empty() || entry.p_state == voice_gateway_entry::state::paused) {
         play(entry);
     }
@@ -246,109 +230,53 @@ void discord::voice_state_listener::play(voice_gateway_entry &entry)
 {
     // Connected state meaning ready to send audio, but nothing loaded at the moment
     if (entry.p_state == voice_gateway_entry::state::connected) {
-        make_audio_process(entry);
+        next_audio_source(entry);
     } else if (entry.p_state == voice_gateway_entry::state::paused) {
-        // Resume
-        entry.p_state = voice_gateway_entry::state::playing;
+        entry.p_state = voice_gateway_entry::state::playing;  // Resume
     }
     if (entry.p_state == voice_gateway_entry::state::playing) {
         send_audio(entry);
     }
 }
 
-void discord::voice_state_listener::make_audio_process(voice_gateway_entry &entry)
+void discord::voice_state_listener::next_audio_source(voice_gateway_entry &entry)
 {
-    namespace bp = boost::process;
-    // Take song off music queue and create new youtube_dl process
     if (entry.music_queue.empty())
         return;
 
-    // Get the next song from the queue, to be sent to youtube-dl for downloading
+    if (!entry.process)
+        entry.process = std::make_unique<music_process>(ctx);
+
+    // Get the next song from the queue
     std::string next = entry.music_queue.front();
     entry.music_queue.pop_front();
 
-    // Assumes previous pipes have been reset, and proceses already waited on
-
-    // Formats at https://github.com/rg3/youtube-dl/blob/master/youtube_dl/extractor/youtube.py
-    // Prefer opus, vorbis, aac
-    entry.process->youtube_dl = bp::child{
-        "youtube-dl -r 1000000 -f 251/250/249/172/171/141/140/139/256/258/325/328/13 -o - " + next,
-        bp::std_in<bp::null, bp::std_err> bp::null, bp::std_out > entry.process->pipe};
-
-    std::cout << "[voice state] created youtube_dl processes for " << next << "\n";
-
-    read_from_pipe({}, 0, entry);
-}
-
-void discord::voice_state_listener::read_from_pipe(const boost::system::error_code &e,
-                                                   size_t transferred, voice_gateway_entry &entry)
-{
-    if (transferred > 0) {
-        // Commit any transferred data to the entry.process->audio_file_data vector
-        auto &vec = entry.process->audio_file_data;
-        auto &buf = entry.process->buffer;
-        vec.insert(vec.end(), buf.begin(), buf.begin() + transferred);
-    }
-    if (!e) {
-        auto pipe_read_cb = [&](auto &ec, size_t transferred) {
-            read_from_pipe(ec, transferred, entry);
-        };
-
-        // Read from the pipe and fill up the audio_file_data vector
-        boost::asio::async_read(entry.process->pipe, boost::asio::buffer(entry.process->buffer),
-                                pipe_read_cb);
-
-    } else if (e == boost::asio::error::eof) {
-        std::cout << "[voice state] got eof from async_pipe\n";
-        // Create avio structure (holds audio data), decoder (demuxing and decoding), and
-        // resampler
-        entry.process->avio = std::make_unique<avio_info>(entry.process->audio_file_data);
-        entry.process->decoder = std::make_unique<audio_decoder>(*entry.process->avio);
-        entry.process->resampler =
-            std::make_unique<audio_resampler>(*entry.process->decoder, 48000, 2, AV_SAMPLE_FMT_S16);
-
-        // Audio is ready to be consumed, via decoder.next_frame()
-        // or via decoder.read() and using decoder.packet to retrieve encoded frame
-
-        // Close the pipe, allow the child to terminate
-        entry.process->pipe.close();
-        entry.process->youtube_dl.wait();
-
-        // We are now ready to play
-        entry.p_state = voice_gateway_entry::state::playing;
-
-        // Begin sending the audio!
+    auto callback = [&](auto &ec) {
+        if (ec) {
+            std::cerr << "[voice state] error making audio source: " << ec.message() << "\n";
+            return;
+        }
         send_audio(entry);
-    } else {
-        std::cerr << "Pipe read error: " << e.message() << "\n";
-    }
-}
+    };
 
-int discord::voice_state_listener::encode_audio(music_process &m, int16_t *pcm, int frame_count)
-{
-    return m.encoder.encode(pcm, frame_count, m.buffer.data(), m.buffer.size());
+    // TODO: determine the best source for this input... for now it is only youtube_dl_source
+    entry.process->source =
+        std::make_unique<youtube_dl_source>(ctx, entry.process->encoder, next, callback);
 }
 
 void discord::voice_state_listener::send_audio(voice_gateway_entry &entry)
 {
-    entry.process->timer.expires_from_now(boost::posix_time::milliseconds(20));
-    // Fetch the next frame from the decoder
-    auto &decoder = entry.process->decoder;
-    auto *frame = decoder->next_frame();
+    assert(entry.process);
+    assert(entry.process->source);
+    auto frame = entry.process->source->next();
 
-    if (frame && entry.p_state == voice_gateway_entry::state::playing) {
+    if (frame.opus_encoded_data && entry.p_state == voice_gateway_entry::state::playing) {
         // Next timer expires after frame_size / 48000 seconds, or frame_size / 48 ms
-        // entry.process->timer.expires_from_now(
-        //    boost::posix_time::milliseconds(frame->nb_samples / 48));
-
-        int frame_count = 0;
-        auto resampled =
-            reinterpret_cast<int16_t *>(entry.process->resampler->resample(frame, frame_count));
-
-        auto encoded_len = encode_audio(*entry.process, resampled, frame_count);
+        entry.process->timer.expires_from_now(
+            boost::posix_time::milliseconds(frame.frame_count / 48));
 
         // Play the frame
-        // entry.gateway->play(entry.process->buffer.data(), encoded_len, frame_count);
+        entry.gateway->play(frame);
 
         auto timer_done_cb = [&](auto &ec) {
             if (!ec && entry.p_state == voice_gateway_entry::state::playing) {
