@@ -3,6 +3,7 @@
 
 #include <json.hpp>
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 
@@ -16,13 +17,13 @@ public:
     void parse_guild(const nlohmann::json &json);
 
     // Returns the guild_id that the channel is in
-    const std::string lookup_channel(const std::string &channel_id);
-    discord::guild get_guild(const std::string &guild_id);
+    uint64_t lookup_channel(uint64_t channel_id);
+    discord::guild *get_guild(uint64_t guild_id);
 
 private:
-    std::map<std::string, guild> guilds;
-    std::map<std::string, std::string> channels_to_guild;
-    std::multimap<std::string, std::string> user_to_guilds;
+    std::map<uint64_t, std::unique_ptr<discord::guild>> guilds;  // guild id to guild struct
+    std::map<uint64_t, uint64_t> channels_to_guild;              // channel id to guild id
+    std::multimap<uint64_t, uint64_t> user_to_guilds;            // user id to multiple guild ids
 };
 }
 

@@ -52,7 +52,7 @@ public:
     void remove_listener(const std::string &event_name, const std::string &handler_name);
     void heartbeat() override;
     void send(const std::string &s, transfer_cb c);
-    const std::string &get_user_id() const;
+    uint64_t get_user_id() const;
     const std::string &get_session_id() const;
 
     boost::asio::ip::tcp::resolver &resolver;
@@ -72,7 +72,8 @@ private:
 
     std::unique_ptr<heartbeater> beater;
     std::string token;
-    std::string user_id, session_id;
+    std::string session_id;
+    uint64_t user_id;
     int seq_num;
     const bool compress = false;
     const int large_threshold = 250;
@@ -85,6 +86,7 @@ private:
     void on_connect(const boost::system::error_code &e);
     void on_ready(nlohmann::json &data);
     void event_loop();
+    void handle_event(const uint8_t *data, size_t len);
 };
 
 boost::system::error_code make_error_code(discord::gateway::error code) noexcept;

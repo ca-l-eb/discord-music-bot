@@ -35,13 +35,13 @@ struct music_process {
 };
 
 struct voice_gateway_entry {
-    std::string channel_id;
-    std::string guild_id;  // server_id in docs
+    uint64_t channel_id;
+    uint64_t guild_id;
     std::string session_id;
     std::string token;
     std::string endpoint;
 
-    enum class state { disconnected, connected, playing, paused } state;
+    enum class state { disconnected, connected, playing, paused } p_state;
 
     std::deque<std::string> music_queue;
     std::unique_ptr<music_process> process;
@@ -62,23 +62,23 @@ private:
     discord::gateway &gateway;
     discord::gateway_store &store;
 
-    // Map guild_id to voice_gateway_entry (since 1 voice connection per guild)
-    std::map<std::string, voice_gateway_entry> voice_gateways;
+    // guild_id to voice_gateway_entry (1 voice connection per guild)
+    std::map<uint64_t, voice_gateway_entry> voice_gateways;
 
     void voice_state_update(const nlohmann::json &data);
     void voice_server_update(const nlohmann::json &data);
     void message_create(const nlohmann::json &data);
 
-    void join_voice_server(const std::string &guild_id, const std::string &channel_id);
-    void leave_voice_server(const std::string &guild_id);
-    void check_command(const std::string &content, const nlohmann::json &data);
-    void do_join(const std::string &params, const nlohmann::json &json);
-    void do_leave(const nlohmann::json &json);
-    void do_list(const nlohmann::json &json);
-    void do_add(const std::string &params, const nlohmann::json &json);
-    void do_skip(const nlohmann::json &json);
-    void do_play(const nlohmann::json &json);
-    void do_pause(const nlohmann::json &json);
+    void join_voice_server(uint64_t guild_id, uint64_t channel_id);
+    void leave_voice_server(uint64_t guild_id);
+    void check_command(const discord::message &m);
+    void do_join(const discord::message &m, const std::string &s);
+    void do_leave(discord::voice_gateway_entry &entry);
+    void do_list(discord::voice_gateway_entry &entry);
+    void do_add(discord::voice_gateway_entry &entry, const std::string &s);
+    void do_skip(discord::voice_gateway_entry &entry);
+    void do_play(discord::voice_gateway_entry &entry);
+    void do_pause(discord::voice_gateway_entry &entry);
 
     void play(voice_gateway_entry &entry);
     void make_audio_process(voice_gateway_entry &entry);

@@ -37,6 +37,10 @@ enum class voice_op {
 };
 
 struct channel {
+    uint64_t id;
+    uint64_t guild_id;
+    int user_limit;
+    int bitrate;
     enum class channel_type {
         guild_text = 0,
         dm = 1,
@@ -45,48 +49,125 @@ struct channel {
         guild_category = 4
     } type;
     std::string name;
-    std::string id;
-    int user_limit;
-    int bitrate;
+    channel() = default;
 };
 
 struct user {
-    std::string id;
+    uint64_t id;
     std::string name;
     std::string discriminator;
+    user() = default;
 };
 
 struct member {
     discord::user user;
     std::string nick;
-    std::string joined_at;
+    member() = default;
 };
 
 struct guild {
-    std::set<member> members;
+    uint64_t id;
+    uint64_t owner;
     std::set<channel> channels;
-    std::string owner;
+    std::set<member> members;
     std::string name;
-    std::string id;
     std::string region;
     bool unavailable;
+    guild() = default;
 };
 
-bool operator<(const channel &lhs, const channel &rhs);
-void to_json(nlohmann::json &json, const channel &c);
-void from_json(const nlohmann::json &json, channel &c);
+struct message {
+    uint64_t id;
+    uint64_t channel_id;
+    discord::user author;
+    std::string content;
+    enum class message_type {
+        default_ = 0,
+        recipient_add = 1,
+        recipient_remove = 2,
+        call = 3,
+        channel_name_change = 4,
+        channel_icon_change = 5,
+        channel_pinned_message = 6,
+        guild_member_join = 7
+    } type;
+    message() = default;
+};
 
-bool operator<(const user &lhs, const user &rhs);
-void to_json(nlohmann::json &json, const discord::user &u);
+struct voice_state {
+    uint64_t guild_id; // server_id in docs
+    uint64_t channel_id;
+    uint64_t user_id;
+    std::string session_id;
+    bool deaf;
+    bool mute;
+    bool self_deaf;
+    bool self_mute;
+    bool suppress;
+    voice_state() = default;
+};
+
+struct payload {
+    discord::gateway_op op;
+    int sequence_num;
+    std::string event_name;
+    nlohmann::json data;
+};
+
+struct voice_payload {
+    discord::voice_op op;
+    nlohmann::json data;
+};
+
+struct voice_ready {
+    uint32_t ssrc;
+    uint16_t port;
+};
+
+struct voice_session {
+    std::string mode;
+    std::vector<uint8_t> secret_key;
+};
+
+bool operator<(const discord::channel &lhs, const discord::channel &rhs);
+bool operator<(const discord::user &lhs, const discord::user &rhs);
+bool operator<(const discord::member &lhs, const discord::member &rhs);
+bool operator<(const discord::guild &lhs, const discord::guild &rhs);
+bool operator<(const discord::message &lhs, const discord::message &rhs);
+
+void from_json(const nlohmann::json &json, discord::channel &c);
 void from_json(const nlohmann::json &json, discord::user &u);
-
-bool operator<(const member &lhs, const member &rhs);
-void to_json(nlohmann::json &json, const discord::member &m);
 void from_json(const nlohmann::json &json, discord::member &m);
-
-bool operator<(const guild &lhs, const guild &rhs);
-void to_json(nlohmann::json &json, const discord::guild &g);
 void from_json(const nlohmann::json &json, discord::guild &g);
+void from_json(const nlohmann::json &json, discord::message &m);
+void from_json(const nlohmann::json &json, discord::voice_state &v);
+void from_json(const nlohmann::json &json, discord::payload &p);
+void from_json(const nlohmann::json &json, discord::voice_payload &vp);
+void from_json(const nlohmann::json &json, discord::voice_ready &vr);
+void from_json(const nlohmann::json &json, discord::voice_session &vs);
+
+namespace event {
+struct hello {
+    int heartbeat_interval;
+};
+
+struct ready {
+    int version;
+    discord::user user;
+    std::string session_id;
+};
+
+struct voice_server_update {
+    uint64_t guild_id;
+    std::string token;
+    std::string endpoint;
+};
+
+void from_json(const nlohmann::json &json, discord::event::hello &h);
+void from_json(const nlohmann::json &json, discord::event::ready &r);
+void from_json(const nlohmann::json &json, discord::event::voice_server_update &v);
+
+}
 }
 
 #endif

@@ -7,6 +7,7 @@
 #include <memory>
 #include <vector>
 
+#include <audio_source/source.h>
 #include <callbacks.h>
 #include <delayed_message_sender.h>
 #include <heartbeater.h>
@@ -42,8 +43,7 @@ public:
         static const boost::system::error_category &instance();
     };
 
-    voice_gateway(boost::asio::io_context &ctx, discord::voice_gateway_entry &e,
-                  std::string user_id);
+    voice_gateway(boost::asio::io_context &ctx, discord::voice_gateway_entry &e, uint64_t user_id);
     ~voice_gateway();
 
     void heartbeat() override;
@@ -61,8 +61,8 @@ private:
     boost::asio::ip::udp::endpoint send_endpoint, receive_endpoint;
     boost::asio::ip::udp::resolver resolver;
     boost::asio::deadline_timer timer;
-    std::string user_id;
 
+    uint64_t user_id;
     uint32_t ssrc;
     uint16_t udp_port;
     std::vector<uint8_t> secret_key;
@@ -81,7 +81,7 @@ private:
 
     void start_speaking(transfer_cb c);
     void stop_speaking(transfer_cb c);
-    void send_audio(const uint8_t *opus_encoded, size_t encoded_len, size_t frame_size);
+    void send_audio(audio_frame audio);
     void identify();
     void resume();
     void event_loop();
