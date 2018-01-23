@@ -18,9 +18,10 @@ public:
     virtual audio_frame next();
 
 private:
+    boost::asio::io_context &ctx;
+    discord::opus_encoder &encoder;
     boost::process::child child;
     boost::process::async_pipe pipe;
-    discord::opus_encoder &encoder;
 
     // Holds the entire contents of an audio file in some format
     std::vector<uint8_t> audio_file_data;
@@ -31,9 +32,11 @@ private:
     std::unique_ptr<audio_resampler> resampler;
 
     error_cb callback;
+    std::deque<audio_frame> frames;
 
-    void make_process(boost::asio::io_context &ctx, const std::string url);
+    void make_process(const std::string &url);
     void read_from_pipe(const boost::system::error_code &e, size_t transferred);
+    void encode_audio();
 };
 
 #endif

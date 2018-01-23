@@ -1,11 +1,12 @@
 #ifndef CMD_AUDIO_SOURCE_H
 #define CMD_AUDIO_SOURCE_H
 
+#include <vector>
+
 #include <callbacks.h>
 
 struct audio_frame {
-    unsigned char *opus_encoded_data;
-    int encoded_len;
+    std::vector<uint8_t> opus_encoded_data;
     int frame_count;
 };
 

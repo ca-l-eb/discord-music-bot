@@ -49,7 +49,7 @@ void discord::voice_state_listener::voice_state_update(const nlohmann::json &dat
 
     // Create the entry if it doesn't exist
     if (voice_gateways.count(state.guild_id) == 0) {
-        voice_gateways.insert({state.guild_id, voice_gateway_entry{}});
+        voice_gateways[state.guild_id] = voice_gateway_entry{};
     }
 
     auto &entry = voice_gateways[state.guild_id];
@@ -228,6 +228,9 @@ void discord::voice_state_listener::leave_voice_server(uint64_t guild_id)
 
 void discord::voice_state_listener::play(voice_gateway_entry &entry)
 {
+    if (entry.p_state == voice_gateway_entry::state::playing)
+        return; // We are already playing!
+
     // Connected state meaning ready to send audio, but nothing loaded at the moment
     if (entry.p_state == voice_gateway_entry::state::connected) {
         next_audio_source(entry);
@@ -256,6 +259,7 @@ void discord::voice_state_listener::next_audio_source(voice_gateway_entry &entry
             std::cerr << "[voice state] error making audio source: " << ec.message() << "\n";
             return;
         }
+        entry.p_state = voice_gateway_entry::state::playing;
         send_audio(entry);
     };
 
@@ -268,10 +272,12 @@ void discord::voice_state_listener::send_audio(voice_gateway_entry &entry)
 {
     assert(entry.process);
     assert(entry.process->source);
+    assert(entry.p_state == voice_gateway_entry::state::playing);
+
     auto frame = entry.process->source->next();
 
-    if (frame.opus_encoded_data && entry.p_state == voice_gateway_entry::state::playing) {
-        // Next timer expires after frame_size / 48000 seconds, or frame_size / 48 ms
+    if (!frame.opus_encoded_data.empty()) {
+        // Next timer expires after frame_size / 48000 seconds, or frame size / 48 ms
         entry.process->timer.expires_from_now(
             boost::posix_time::milliseconds(frame.frame_count / 48));
 
@@ -285,13 +291,10 @@ void discord::voice_state_listener::send_audio(voice_gateway_entry &entry)
         };
         // Enqueue wait for the frame to send
         entry.process->timer.async_wait(timer_done_cb);
-    } else if (entry.p_state == voice_gateway_entry::state::playing) {
-        // If we are still in the playing state and there are no more frames to read,
-        // play the next entry
+    } else {
+        // Done with the current source, play next entry
         std::cout << "[voice state] sound clip finished\n";
         entry.p_state = voice_gateway_entry::state::connected;
         play(entry);
-    } else {
-        std::cout << "[voice state] not in playing state\n";
     }
 }
