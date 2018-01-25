@@ -23,7 +23,6 @@ set(SOURCE_FILES
         src/gateway.cc
         src/heartbeater.cc
         src/net/base64.cc
-        src/net/http_request.cc
         src/net/http_response.cc
         src/net/resource_parser.cc
         src/net/send_queue.cc

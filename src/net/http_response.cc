@@ -33,7 +33,6 @@ void http_response::parse(boost::asio::streambuf &buf)
 void http_response::parse_status_line(boost::asio::streambuf &buf)
 {
     std::string line;
-
     // Look for newline
     if (next_line(buf, line)) {
         check_response_status(line);
@@ -240,6 +239,7 @@ void http_response::do_content_length(boost::asio::streambuf &buf)
 
         length -= remaining.size();
         body_str += remaining;
+        buf.consume(remaining.size());
     }
     if (length == 0)
         p_state = parse_state::done;
@@ -254,6 +254,7 @@ void http_response::do_read_all(boost::asio::streambuf &buf)
         auto end = begin + buf.size();
 
         body_str += std::string{begin, end};
+        buf.consume(buf.size());
     }
 }
 
