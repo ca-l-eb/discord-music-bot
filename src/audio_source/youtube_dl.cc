@@ -29,6 +29,9 @@ void youtube_dl_source::make_process(const std::string &url)
 
     std::cout << "[youtube-dl source] created process for " << url << "\n";
 
+    avio = std::make_unique<avio_info>(audio_file_data);
+    decoder = std::make_unique<audio_decoder>();
+
     read_from_pipe({}, 0);
 }
 
@@ -37,6 +40,9 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
     if (transferred > 0) {
         // Commit any transferred data to the audio_file_data vector
         audio_file_data.insert(audio_file_data.end(), buffer.begin(), buffer.begin() + transferred);
+
+        // TODO: change avio and decoder so it can try to read the audio file as it streams in
+        // for quicker playback
     }
     if (!e) {
         auto pipe_read_cb = [&](auto &ec, size_t transferred) { read_from_pipe(ec, transferred); };
@@ -52,10 +58,13 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
             ctx.post([=]() { callback(make_error_code(boost::system::errc::io_error)); });
             return;
         }
-        // Create avio structure (holds audio data), decoder (demuxing and decoding), and
-        // resampler
-        avio = std::make_unique<avio_info>(audio_file_data);
-        decoder = std::make_unique<audio_decoder>(*avio);
+
+        decoder->open_input(*avio);
+        decoder->find_stream_info();
+        decoder->find_best_stream();
+        decoder->open_decoder();
+
+        // TODO: attempt to make decoder with the current data read so far...
         resampler = std::make_unique<audio_resampler>(*decoder, 48000, 2, AV_SAMPLE_FMT_S16);
 
         // Close the pipe, allow the child to terminate
@@ -82,15 +91,16 @@ void youtube_dl_source::encode_audio()
     // decode all the data into the vector
     AVFrame *avf;
     std::vector<int16_t> data;
-    data.reserve(1024*1024*10);
+    data.reserve(1024 * 1024 * 10);
     avf = decoder->next_frame();
     while (avf) {
         auto start = high_resolution_clock::now();
         avf = decoder->next_frame();
-        if (!avf) break;
+        if (!avf)
+            break;
         auto decoder_end = high_resolution_clock::now();
         int frame_count;
-        auto *resampled_data = reinterpret_cast<int16_t*>(resampler->resample(avf, frame_count));
+        auto *resampled_data = reinterpret_cast<int16_t *>(resampler->resample(avf, frame_count));
         if (frame_count > 0)
             data.insert(data.end(), resampled_data, resampled_data + frame_count * 2);
         auto end = high_resolution_clock::now();
@@ -110,7 +120,7 @@ void youtube_dl_source::encode_audio()
 
     auto encode_start = high_resolution_clock::now();
     int16_t *src = data.data();
-    for (int i = 0 ; i < num_blocks; i++) {
+    for (int i = 0; i < num_blocks; i++) {
         audio_frame f{};
 
         auto start = high_resolution_clock::now();

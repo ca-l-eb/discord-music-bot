@@ -12,8 +12,7 @@ extern "C" {
 }
 
 struct buffer_data {
-    uint8_t *data;
-    size_t size;
+    std::vector<uint8_t> &data;
     size_t loc;
 };
 
@@ -31,25 +30,32 @@ struct audio_decoder {
     AVPacket packet;
     AVFormatContext *format_context;  // Demuxer interface
     AVCodecContext *decoder_context;  // Decoder interface
+    AVCodec *decoder;
     AVFrame *frame;
     int stream_index;  // Audio stream in format_context
     bool do_read;
     bool do_feed;
 
-    audio_decoder(avio_info &av);
+    audio_decoder();
     ~audio_decoder();
     int read();
     int feed(bool flush);
     int decode();
     AVFrame *next_frame();  // Get next frame from the audio stream
+    int open_input(avio_info &av);
+    int find_stream_info();
+    int find_best_stream();
+    void open_decoder();
 };
 
 struct audio_resampler {
+private:
     SwrContext *swr;
     uint8_t *frame_buf;
     int current_alloc;
     AVSampleFormat format;
 
+public:
     audio_resampler(audio_decoder &decoder, int sample_rate, int channels, AVSampleFormat format);
     ~audio_resampler();
     void *resample(AVFrame *frame, int &frame_count);
