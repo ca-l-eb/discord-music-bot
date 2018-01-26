@@ -10,39 +10,35 @@ static int read_packet(void *opaque, uint8_t *buf, int buf_size)
 {
     assert(opaque);
     buffer_data *bd = (buffer_data *) opaque;
+
     buf_size = FFMIN((size_t) buf_size, bd->data.size() - bd->loc);
+    if (buf_size < 0)
+        return 0;
     memcpy(buf, &bd->data[bd->loc], buf_size);
     bd->loc += buf_size;
     return buf_size;
 }
 
-#include <iostream>
 static int64_t seek(void *opaque, int64_t offset, int whence)
 {
     assert(opaque);
     buffer_data *bd = (buffer_data *) opaque;
-    std::cout << "seek called. loc:" << bd->loc << " size:" << bd->data.size()
-              << " offset:" << offset << " whence:";
     switch (whence) {
         case SEEK_SET:
-            std::cout << "SEEK_SET\n";
             return bd->loc = offset;
         case SEEK_CUR:
-            std::cout << "SEEK_CUR\n";
             return bd->loc += offset;
         case SEEK_END:
-            std::cout << "SEEK_END\n";
             return bd->loc = bd->data.size() + offset;
         case AVSEEK_SIZE:
-            std::cout << "AVSEEK_SIZE\n";
-            return bd->data.size() - bd->loc;
+            return bd->data.size();
     }
     return -1;
 }
 
 avio_info::avio_info(std::vector<uint8_t> &audio_data) : audio_file_data{audio_data, 0}
 {
-    avio_buf_len = 4096;
+    avio_buf_len = 8192;
     avio_buf = reinterpret_cast<uint8_t *>(av_malloc(avio_buf_len));
     if (!avio_buf)
         throw std::runtime_error{"Could not allocate avio context buffer"};
@@ -61,7 +57,7 @@ avio_info::~avio_info()
     av_free(avio_context);
 }
 
-audio_decoder::audio_decoder() : do_read{true}, do_feed{true}, stream_index{-1}
+audio_decoder::audio_decoder() : stream_index{-1}, do_read{true}, do_feed{true}
 {
     frame = av_frame_alloc();
     if (!frame)
@@ -89,7 +85,7 @@ int audio_decoder::find_stream_info()
     return avformat_find_stream_info(format_context, nullptr);
 }
 
-void audio_decoder::find_best_stream()
+int audio_decoder::find_best_stream()
 {
     // Get best audio stream from format_context, and possibly decoder for this stream
     return stream_index =

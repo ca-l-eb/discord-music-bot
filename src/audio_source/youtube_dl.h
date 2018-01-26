@@ -32,11 +32,20 @@ private:
     std::unique_ptr<audio_resampler> resampler;
 
     error_cb callback;
-    std::deque<audio_frame> frames;
+    bool notified;
+
+    enum class decoder_state {
+        start,
+        opened_input,
+        found_stream_info,
+        found_best_stream,
+        opened_decoder,
+        ready
+    } state;
 
     void make_process(const std::string &url);
     void read_from_pipe(const boost::system::error_code &e, size_t transferred);
-    void encode_audio();
+    void try_stream();
 };
 
 #endif

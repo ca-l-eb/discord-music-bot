@@ -150,7 +150,7 @@ void websocket::on_upgrade_sent(const boost::system::error_code &ec)
         io.post([=]() { connect_callback(ec); });
         return;
     }
-    auto mutable_buffer = buffer.prepare(4096);
+    auto mutable_buffer = buffer.prepare(32768);
     auto callback = [this](auto &ec, auto transferred) { on_upgrade_receive(ec, transferred); };
     if (secure_connection) {
         stream.async_read_some(mutable_buffer, callback);
@@ -295,7 +295,7 @@ void websocket::on_data_receive(const boost::system::error_code &ec, size_t tran
         // WebSocket close code, but it will indicate closed connection on next read)
         if (!close_status)
             close_status = 1;
-    } else if (ec) {
+    } else if (ec && ec != boost::asio::error::operation_aborted) {
         // Some other error
         throw std::runtime_error("Error receiving data from websocket: " + ec.message());
     }
