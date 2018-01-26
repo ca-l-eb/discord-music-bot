@@ -1,5 +1,4 @@
 #include <boost/process.hpp>
-#include <chrono>
 #include <iostream>
 #include <json.hpp>
 
@@ -29,9 +28,10 @@ discord::voice_gateway::voice_gateway(boost::asio::io_context &ctx, discord::voi
     , timestamp{(uint32_t) rand()}
     , seq_num{(uint16_t) rand()}
     , state{connection_state::disconnected}
+    , is_speaking{false}
 {
     std::cout << "[voice] connecting to gateway " << entry.endpoint << " user_id[" << user_id
-              << " ] session_id[" << entry.session_id << "] token[" << entry.token << "]\n";
+              << "] session_id[" << entry.session_id << "] token[" << entry.token << "]\n";
 
     socket.open(boost::asio::ip::udp::v4());
     std::cout << "[voice] created udp socket\n";
@@ -353,8 +353,6 @@ static void print_rtp_send_info(const boost::system::error_code &ec, size_t tran
 
 void discord::voice_gateway::send_audio(audio_frame frame)
 {
-    using namespace std::chrono;
-    auto start = high_resolution_clock::now();
     // Make sure we have enough room to store the encoded audio, 12 bytes for RTP header,
     // crypto_secretbo_MACBYTES (for MAC) in buffer
     if (frame.opus_encoded_data.size() + 12 + crypto_secretbox_MACBYTES > buffer.size())
@@ -376,7 +374,6 @@ void discord::voice_gateway::send_audio(audio_frame frame)
     auto error = discord::crypto::xsalsa20_poly1305_encrypt(
         frame.opus_encoded_data.data(), write_audio, frame.opus_encoded_data.size(),
         secret_key.data(), nonce);
-    auto encrypt_done = high_resolution_clock::now();
 
     if (error) {
         std::cerr << "[voice] error encrypting data\n";
@@ -387,16 +384,7 @@ void discord::voice_gateway::send_audio(audio_frame frame)
     int encrypted_len = frame.opus_encoded_data.size() + 12 + crypto_secretbox_MACBYTES;
 
     socket.async_send_to(boost::asio::buffer(buf, encrypted_len), send_endpoint,
-                         [=](auto &ec, auto transferred) {
-                             if (ec) {
-                                 std::cerr << "[RTP] error: " << ec.message() << "\n";
-                             } else {
-                                 std::cout << "[RTP] encrypt " << duration_cast<microseconds>(encrypt_done - start).count() << "us ";
-                                 auto now = high_resolution_clock::now();
-                                 std::cout << "send " << duration_cast<microseconds>(now - encrypt_done).count() << "us ";
-                                 std::cout << transferred << " bytes sent\n";
-                             }
-                         });
+                         print_rtp_send_info);
 }
 
 const char *discord::voice_gateway::error_category::name() const noexcept

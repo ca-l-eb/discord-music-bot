@@ -1,6 +1,7 @@
 #include <gateway_store.h>
+#include <iostream>
 
-void discord::gateway_store::parse_guild(const nlohmann::json &json)
+void discord::gateway_store::guild_create(const nlohmann::json &json)
 {
     try {
         discord::guild g = json;
@@ -11,14 +12,52 @@ void discord::gateway_store::parse_guild(const nlohmann::json &json)
         for (auto &member : g.members)
             user_to_guilds.insert({member.user.id, g.id});
 
-        if (!guilds[g.id]) {
-            guilds[g.id] = std::make_unique<discord::guild>();
-            *guilds[g.id] = std::move(g);
-        } else {
-            // TODO: update fields in existing guild
+        guilds[g.id] = std::make_unique<discord::guild>(std::move(g));
+    } catch (std::exception &e) {
+        std::cerr << "[gateway store] " << e.what() << "\n";
+    }
+}
+
+void discord::gateway_store::channel_create(const nlohmann::json &json)
+{
+    try {
+        discord::channel c = json;
+        channels_to_guild[c.id] = c.guild_id;
+        auto g = guilds[c.guild_id].get();
+        if (g) {
+            g->channels.insert(c);
         }
     } catch (std::exception &e) {
-        // Do nothing if we get an exception
+        std::cerr << "[gateway store] " << e.what() << "\n";
+    }
+}
+
+void discord::gateway_store::channel_update(const nlohmann::json &json)
+{
+    try {
+        discord::channel c = json;
+        auto g = guilds[c.guild_id].get();
+        if (g) {
+            // erase old entry, replace with new channel
+            g->channels.erase(c);
+            g->channels.insert(c);
+        }
+    } catch (std::exception &e) {
+        std::cerr << "[gateway store] " << e.what() << "\n";
+    }
+}
+
+void discord::gateway_store::channel_delete(const nlohmann::json &json)
+{
+    try {
+        discord::channel c = json;
+        auto g = guilds[c.guild_id].get();
+        if (g) {
+            g->channels.erase(c);
+        }
+        channels_to_guild.erase(c.id);
+    } catch (std::exception &e) {
+        std::cerr << "[gateway store] " << e.what() << "\n";
     }
 }
 

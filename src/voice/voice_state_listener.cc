@@ -16,6 +16,24 @@ static discord::guild *get_guild_from_channel(uint64_t channel_id, discord::gate
     return store.get_guild(guild_id);
 }
 
+static void update_bitrate(discord::voice_gateway_entry &entry, discord::gateway_store &store)
+{
+    discord::guild *guild = get_guild_from_channel(entry.channel_id, store);
+    if (!guild)
+        return;
+
+    // to_find contains channel_id to match with the desired channel to determine the audio
+    // bitrate
+    discord::channel to_find;
+    to_find.id = entry.channel_id;
+    auto channel = guild->channels.find(to_find);
+    if (channel != guild->channels.end()) {
+        entry.process->encoder.set_bitrate(channel->bitrate);
+        std::cout << "[voice state] '" << channel->name << "' playing at "
+                  << (channel->bitrate / 1000) << "Kbps\n";
+    }
+}
+
 discord::voice_state_listener::voice_state_listener(boost::asio::io_context &ctx,
                                                     discord::gateway &gateway,
                                                     discord::gateway_store &store)
@@ -56,6 +74,9 @@ void discord::voice_state_listener::voice_state_update(const nlohmann::json &dat
     entry.channel_id = state.channel_id;
     entry.guild_id = state.guild_id;
     entry.session_id = std::move(state.session_id);
+
+    if (entry.process)
+        update_bitrate(entry, store);
 }
 
 void discord::voice_state_listener::voice_server_update(const nlohmann::json &data)
@@ -139,6 +160,8 @@ void discord::voice_state_listener::check_command(const discord::message &m)
 void discord::voice_state_listener::do_join(const discord::message &m, const std::string &s)
 {
     auto *guild = get_guild_from_channel(m.channel_id, store);
+    if (!guild)
+        return;
 
     auto it = voice_gateways.find(guild->id);
     bool connected = it == voice_gateways.end();
@@ -209,13 +232,12 @@ void discord::voice_state_listener::join_voice_server(uint64_t guild_id, uint64_
 {
     std::string guild_str = std::to_string(guild_id);
     std::string channel_str = std::to_string(channel_id);
-    const char *channel_ptr = channel_id == 0 ? nullptr : channel_str.c_str();
 
     // After join, we expect back a VOICE_STATE_UPDATE event
     nlohmann::json json{{"op", static_cast<int>(gateway_op::voice_state_update)},
                         {"d",
                          {{"guild_id", guild_str},
-                          {"channel_id", channel_ptr},
+                          {"channel_id", channel_str},
                           {"self_mute", false},
                           {"self_deaf", false}}}};
     gateway.send(json.dump(), print_transfer_info);
@@ -223,13 +245,22 @@ void discord::voice_state_listener::join_voice_server(uint64_t guild_id, uint64_
 
 void discord::voice_state_listener::leave_voice_server(uint64_t guild_id)
 {
-    join_voice_server(guild_id, 0);
+    // json serializer doesn't like being passed char* pointing to nullptr,
+    // so I guess we need to double this method
+    std::string guild_str = std::to_string(guild_id);
+    nlohmann::json json{{"op", static_cast<int>(gateway_op::voice_state_update)},
+                        {"d",
+                         {{"guild_id", guild_str},
+                          {"channel_id", nullptr},
+                          {"self_mute", false},
+                          {"self_deaf", false}}}};
+    gateway.send(json.dump(), print_transfer_info);
 }
 
 void discord::voice_state_listener::play(voice_gateway_entry &entry)
 {
     if (entry.p_state == voice_gateway_entry::state::playing)
-        return; // We are already playing!
+        return;  // We are already playing!
 
     // Connected state meaning ready to send audio, but nothing loaded at the moment
     if (entry.p_state == voice_gateway_entry::state::connected) {
@@ -247,8 +278,10 @@ void discord::voice_state_listener::next_audio_source(voice_gateway_entry &entry
     if (entry.music_queue.empty())
         return;
 
-    if (!entry.process)
+    if (!entry.process) {
         entry.process = std::make_unique<music_process>(ctx);
+        update_bitrate(entry, store);
+    }
 
     // Get the next song from the queue
     std::string next = entry.music_queue.front();
@@ -274,12 +307,15 @@ void discord::voice_state_listener::send_audio(voice_gateway_entry &entry)
     assert(entry.process->source);
     assert(entry.p_state == voice_gateway_entry::state::playing);
 
+    auto start = std::chrono::high_resolution_clock::now();
     auto frame = entry.process->source->next();
+    auto end = std::chrono::high_resolution_clock::now();
+    auto time_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
     if (!frame.opus_encoded_data.empty()) {
         // Next timer expires after frame_size / 48000 seconds, or frame size / 48 ms
         entry.process->timer.expires_from_now(
-            boost::posix_time::milliseconds(frame.frame_count / 48));
+            boost::posix_time::microseconds(((frame.frame_count * 1000) / 48) - time_us.count()));
 
         // Play the frame
         entry.gateway->play(frame);
@@ -294,6 +330,7 @@ void discord::voice_state_listener::send_audio(voice_gateway_entry &entry)
     } else {
         // Done with the current source, play next entry
         std::cout << "[voice state] sound clip finished\n";
+        entry.gateway->stop();
         entry.p_state = voice_gateway_entry::state::connected;
         play(entry);
     }

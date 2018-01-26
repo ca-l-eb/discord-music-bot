@@ -15,7 +15,13 @@ discord::gateway::gateway(boost::asio::io_context &ctx, const std::string &token
 {
     gateway_event_map.emplace("READY", [&](nlohmann::json &data) { on_ready(data); });
     gateway_event_map.emplace("GUILD_CREATE",
-                              [&](nlohmann::json &data) { store.parse_guild(data); });
+                              [&](nlohmann::json &data) { store.guild_create(data); });
+    gateway_event_map.emplace("CHANNEL_CREATE",
+                              [&](nlohmann::json &data) { store.channel_create(data); });
+    gateway_event_map.emplace("CHANNEL_UPDATE",
+                              [&](nlohmann::json &data) { store.channel_update(data); });
+    gateway_event_map.emplace("CHANNEL_DELETE",
+                              [&](nlohmann::json &data) { store.channel_delete(data); });
     gateway_event_map.emplace("RESUME",
                               [&](nlohmann::json &) { state = connection_state::connected; });
 

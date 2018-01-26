@@ -54,8 +54,8 @@ TEST(GatewayStore, LoadStore)
             FAIL();
         
         discord::gateway_store store;
-        store.parse_guild(json1["d"]);
-        store.parse_guild(json2["d"]);
+        store.guild_create(json1["d"]);
+        store.guild_create(json2["d"]);
         
         auto s = store.lookup_channel(1);
         EXPECT_EQ(0, s);

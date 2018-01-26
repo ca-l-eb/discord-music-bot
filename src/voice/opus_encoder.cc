@@ -30,3 +30,12 @@ int32_t discord::opus_encoder::encode_float(const float *src, int frame_size, un
 {
     return opus_encode_float(encoder, src, frame_size, dest, dest_size);
 }
+
+void discord::opus_encoder::set_bitrate(int bitrate)
+{
+    if (bitrate < 8000)
+        bitrate = 8000;
+    if (bitrate > 128000)
+        bitrate = 128000;
+    opus_encoder_ctl(encoder, OPUS_SET_BITRATE(bitrate));
+}

@@ -15,6 +15,7 @@ public:
 
     int32_t encode(const int16_t *src, int frame_size, unsigned char *dest, int dest_size);
     int32_t encode_float(const float *src, int frame_size, unsigned char *dest, int dest_size);
+    void set_bitrate(int bitrate);
 
 private:
     OpusEncoder *encoder;

@@ -15,6 +15,17 @@ T get_safe(const nlohmann::json &json, const std::string &field, T default_val)
         return default_val;
 }
 
+template<>
+std::string get_safe<std::string>(const nlohmann::json &json, const std::string &field,
+                                  std::string default_val)
+{
+    auto find = json.find(field);
+    if (find != json.end() && find.value().is_string())
+        return find.value();
+    else
+        return default_val;
+}
+
 static std::string empty_string = "";
 static std::string zero_string = "0";
 
@@ -27,7 +38,7 @@ void discord::from_json(const nlohmann::json &json, discord::channel &c)
 {
     assert(json.is_object());
     c.id = snowflake(json.at("id").get<std::string>());
-    c.guild_id = snowflake(get_safe(json, "guild", zero_string));
+    c.guild_id = snowflake(get_safe(json, "guild_id", zero_string));
     c.user_limit = get_safe(json, "user-limit", 0);
     c.bitrate = get_safe(json, "bitrate", 0);
     c.type = json.at("type").get<discord::channel::channel_type>();
@@ -95,7 +106,7 @@ void discord::from_json(const nlohmann::json &json, discord::voice_state &v)
 {
     assert(json.is_object());
     v.guild_id = snowflake(get_safe(json, "guild_id", zero_string));
-    v.channel_id = snowflake(json.at("channel_id").get<std::string>());
+    v.channel_id = snowflake(get_safe(json, "channel_id", zero_string));
     v.user_id = snowflake(json.at("user_id").get<std::string>());
     v.session_id = json.at("session_id").get<std::string>();
     v.deaf = get_safe(json, "deaf", false);
