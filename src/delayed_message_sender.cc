@@ -2,9 +2,12 @@
 
 #include <delayed_message_sender.h>
 
-discord::delayed_message_sender::delayed_message_sender(boost::asio::io_context &ctx,
-                                                        websocket &websocket, int delay_ms)
-    : ctx{ctx}, send_timer{ctx}, timer_strand{ctx}, websock{websocket}, delay_ms{delay_ms}
+discord::delayed_message_sender::delayed_message_sender(std::shared_ptr<websocket> websocket,
+                                                        int delay_ms)
+    : send_timer{websocket->get_io_context()}
+    , timer_strand{websocket->get_io_context()}
+    , websock{websocket}
+    , delay_ms{delay_ms}
 {
     // We want the first send to be immediate, after that, we reset upon getting notice of a
     // sucessfull send
@@ -14,7 +17,7 @@ discord::delayed_message_sender::delayed_message_sender(boost::asio::io_context 
 void discord::delayed_message_sender::safe_send(const std::string &s, transfer_cb c)
 {
     auto callback = [=]() { enqueue_message(s, c); };
-    ctx.post(boost::asio::bind_executor(timer_strand, callback));
+    boost::asio::post(boost::asio::bind_executor(timer_strand, callback));
 }
 
 // This idea is from CppCon 2016 Talk by Michael Caisse "Asynchronous IO with Boost.Asio"
@@ -42,8 +45,8 @@ void discord::delayed_message_sender::async_wait_for_timer_then_send()
                 send_timer.expires_from_now(boost::posix_time::milliseconds(delay_ms));
                 packet_send_done(ec, transferred);
             };
-            websock.async_send(write_queue.front(),
-                               boost::asio::bind_executor(timer_strand, callback));
+            websock->async_send(write_queue.front(),
+                                boost::asio::bind_executor(timer_strand, callback));
         }
     });
 }
@@ -52,7 +55,7 @@ void discord::delayed_message_sender::packet_send_done(const boost::system::erro
                                                        size_t transferred)
 {
     auto callback = callback_queue.front();
-    ctx.post([=]() { callback(e, transferred); });
+    boost::asio::post(websock->get_io_context(), [=]() { callback(e, transferred); });
     write_queue.pop_front();
     callback_queue.pop_front();
 

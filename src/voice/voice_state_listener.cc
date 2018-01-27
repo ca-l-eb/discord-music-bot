@@ -185,6 +185,7 @@ void discord::voice_state_listener::do_leave(discord::voice_gateway_entry &entry
     if (entry.p_state != voice_gateway_entry::state::disconnected) {
         entry.p_state = voice_gateway_entry::state::disconnected;
         entry.music_queue.clear();
+        entry.gateway->stop();
         leave_voice_server(entry.guild_id);
     }
 }

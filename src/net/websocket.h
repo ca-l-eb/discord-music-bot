@@ -4,16 +4,18 @@
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
 #include <cstdint>
+#include <memory>
 #include <string>
 
 #include <callbacks.h>
+#include <error.h>
 #include <net/http_response.h>
 
 class send_queue;
 
 static const std::string websocket_guid{"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"};
 
-class websocket
+class websocket : public std::enable_shared_from_this<websocket>
 {
 public:
     enum class opcode : int8_t {
@@ -67,22 +69,6 @@ public:
         tls_handshake_error = 1015  // don't send
     };
 
-    enum class error {
-        websocket_connection_closed = 1,
-        upgrade_failed,
-        bad_upgrade_key,
-        no_upgrade_key,
-        server_masked_data,
-    };
-
-    struct error_category : public boost::system::error_category {
-        virtual const char *name() const noexcept;
-        virtual std::string message(int ev) const noexcept;
-        virtual bool equivalent(const boost::system::error_code &code, int condition) const
-            noexcept;
-        static const boost::system::error_category &instance();
-    };
-
     explicit websocket(boost::asio::io_context &ioc);
     websocket(const websocket &) = delete;
     websocket &operator=(const websocket &) = delete;
@@ -98,16 +84,16 @@ public:
 
     void close(websocket::status_code = websocket::status_code::normal);
     uint16_t close_code();
+    boost::asio::io_context &get_io_context();
 
 private:
-    boost::asio::io_context &io;
     boost::asio::ssl::context ctx;
     boost::asio::ssl::stream<boost::asio::ip::tcp::socket> stream;
     boost::asio::streambuf buffer;
     std::string host, resource;
     bool secure_connection;
 
-    std::unique_ptr<send_queue> queue;
+    std::shared_ptr<send_queue> queue;
     http_response response;
     frame_parser parser;
     std::string expected_accept;
@@ -136,12 +122,6 @@ private:
     void handle_frame();
 
     void pong(const uint8_t *msg, size_t len);
-};
-
-boost::system::error_code make_error_code(websocket::error code) noexcept;
-
-template<>
-struct boost::system::is_error_code_enum<websocket::error> : public boost::true_type {
 };
 
 #endif

@@ -3,6 +3,7 @@
 #include <json.hpp>
 
 #include <discord.h>
+#include <errors.h>
 #include <net/resource_parser.h>
 #include <voice/crypto.h>
 #include <voice/opus_encoder.h>
@@ -15,8 +16,8 @@ static void write_rtp_header(unsigned char *buffer, uint16_t seq_num, uint32_t t
 discord::voice_gateway::voice_gateway(boost::asio::io_context &ctx, discord::voice_gateway_entry &e,
                                       uint64_t user_id)
     : ctx{ctx}
-    , websock{ctx}
-    , sender{ctx, websock, 500}
+    , websock{std::make_shared<websocket>(ctx)}
+    , sender{websock, 500}
     , entry{e}
     , socket{ctx}
     , resolver{ctx}
@@ -47,14 +48,14 @@ void discord::voice_gateway::connect(boost::asio::ip::tcp::resolver &resolver, e
     voice_connect_callback = c;
     auto websock_connect_cb = [&](auto &ec) { on_connect(ec); };
     // Make sure we're using voice gateway v3
-    websock.async_connect("wss://" + entry.endpoint + "/?v=3", resolver, websock_connect_cb);
+    websock->async_connect("wss://" + entry.endpoint + "/?v=3", resolver, websock_connect_cb);
 }
 
 void discord::voice_gateway::on_connect(const boost::system::error_code &ec)
 {
     if (ec) {
         std::cerr << "[voice] websocket connect error: " << ec.message() << "\n";
-        ctx.post([&]() { voice_connect_callback(ec); });
+        boost::asio::post(ctx, [&]() { voice_connect_callback(ec); });
     } else {
         std::cout << "[voice] websocket connected\n";
         beater = std::make_unique<discord::heartbeater>(ctx, *this);
@@ -73,7 +74,7 @@ void discord::voice_gateway::identify()
     auto identify_sent_cb = [&](auto &ec, auto) {
         if (ec) {
             std::cout << "[voice] gateway identify error: " << ec.message() << "\n";
-            ctx.post([&]() { voice_connect_callback(ec); });
+            boost::asio::post(ctx, [&]() { voice_connect_callback(ec); });
         } else {
             std::cout << "[voice] starting event loop\n";
             event_loop();
@@ -91,19 +92,19 @@ void discord::voice_gateway::event_loop()
 {
     auto websock_msg_cb = [&](auto &ec, const auto *data, size_t len) {
         if (ec) {
-            if (ec == websocket::error::websocket_connection_closed) {
-                auto code = websock.close_code();
-                ctx.post(
-                    [&]() { voice_connect_callback(static_cast<voice_gateway::error>(code)); });
+            if (ec == websocket_errc::websocket_connection_closed) {
+                auto code = websock->close_code();
+                boost::asio::post(ctx,
+                                  [&]() { voice_connect_callback(static_cast<voice_errc>(code)); });
             } else {
                 std::cerr << "[voice] gateway websocket read error: " << ec.message() << "\n";
-                ctx.post([&]() { voice_connect_callback(ec); });
+                boost::asio::post(ctx, [&]() { voice_connect_callback(ec); });
             }
         } else {
             handle_event(data, len);
         }
     };
-    websock.async_next_message(websock_msg_cb);
+    websock->async_next_message(websock_msg_cb);
 }
 
 void discord::voice_gateway::handle_event(const uint8_t *data, size_t len)
@@ -192,7 +193,7 @@ void discord::voice_gateway::extract_ready_info(nlohmann::json &data)
     resolver.async_resolve(query, [&](const boost::system::error_code &e,
                                       boost::asio::ip::udp::resolver::iterator iterator) {
         if (e) {
-            ctx.post([&]() { voice_connect_callback(e); });
+            boost::asio::post(ctx, [&]() { voice_connect_callback(e); });
         } else {
             send_endpoint = *iterator;
             ip_discovery();
@@ -213,7 +214,7 @@ void discord::voice_gateway::extract_session_info(nlohmann::json &data)
                                  std::to_string(secret_key.size()));
 
     // We are ready to start speaking!
-    ctx.post([&]() { voice_connect_callback({}); });
+    boost::asio::post(ctx, [&]() { voice_connect_callback({}); });
 }
 
 void discord::voice_gateway::ip_discovery()
@@ -227,7 +228,7 @@ void discord::voice_gateway::ip_discovery()
     send_ip_discovery_datagram();
     auto udp_recv_cb = [&](auto &ec, auto transferred) {
         if (ec) {
-            ctx.post([&]() { voice_connect_callback(ec); });
+            boost::asio::post(ctx, [&]() { voice_connect_callback(ec); });
         } else if (transferred >= 70) {
             // We got our response, cancel the next send
             timer.cancel();
@@ -260,7 +261,8 @@ void discord::voice_gateway::send_ip_discovery_datagram()
         }
         if (retries == 0) {
             // Alert the caller that we failed
-            ctx.post([&]() { voice_connect_callback(voice_gateway::error::ip_discovery_failed); });
+            boost::asio::post(ctx,
+                              [&]() { voice_connect_callback(voice_errc::ip_discovery_failed); });
             // close the socket to complete the async_receive_from
             socket.close();
             return;
@@ -385,59 +387,6 @@ void discord::voice_gateway::send_audio(audio_frame frame)
 
     socket.async_send_to(boost::asio::buffer(buf, encrypted_len), send_endpoint,
                          print_rtp_send_info);
-}
-
-const char *discord::voice_gateway::error_category::name() const noexcept
-{
-    return "voice_gateway";
-}
-
-std::string discord::voice_gateway::error_category::message(int ev) const noexcept
-{
-    switch (voice_gateway::error(ev)) {
-        case voice_gateway::error::ip_discovery_failed:
-            return "ip discovery failed";
-        case voice_gateway::error::unknown_opcode:
-            return "invalid opcode";
-        case voice_gateway::error::not_authenticated:
-            return "sent payload before identified";
-        case voice_gateway::error::authentication_failed:
-            return "incorrect token in identify payload";
-        case voice_gateway::error::already_authenticated:
-            return "sent more than one identify payload";
-        case voice_gateway::error::session_no_longer_valid:
-            return "session is no longer valid";
-        case voice_gateway::error::session_timeout:
-            return "session has timed out";
-        case voice_gateway::error::server_not_found:
-            return "server not found";
-        case voice_gateway::error::unknown_protocol:
-            return "unrecognized protocol";
-        case voice_gateway::error::disconnected:
-            return "disconnected";
-        case voice_gateway::error::voice_server_crashed:
-            return "voice server crashed";
-        case voice_gateway::error::unknown_encryption_mode:
-            return "unrecognized encryption";
-    }
-    return "Unknown voice gateway error";
-}
-
-bool discord::voice_gateway::error_category::equivalent(const boost::system::error_code &code,
-                                                        int condition) const noexcept
-{
-    return &code.category() == this && static_cast<int>(code.value()) == condition;
-}
-
-const boost::system::error_category &discord::voice_gateway::error_category::instance()
-{
-    static voice_gateway::error_category instance;
-    return instance;
-}
-
-boost::system::error_code discord::make_error_code(discord::voice_gateway::error code) noexcept
-{
-    return {(int) code, discord::voice_gateway::error_category::instance()};
 }
 
 static void write_rtp_header(unsigned char *buffer, uint16_t seq_num, uint32_t timestamp,

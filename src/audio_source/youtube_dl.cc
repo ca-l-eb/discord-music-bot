@@ -64,7 +64,7 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
 
             if (!notified && state == decoder_state::ready) {
                 notified = true;
-                ctx.post([=]() { callback({}); });
+                boost::asio::post(ctx, [=]() { callback({}); });
             }
         }
     }
@@ -79,7 +79,8 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
 
         if (audio_file_data.empty()) {
             // TODO: add error codes
-            ctx.post([=]() { callback(make_error_code(boost::system::errc::io_error)); });
+            boost::asio::post(ctx,
+                              [=]() { callback(make_error_code(boost::system::errc::io_error)); });
             return;
         }
 
@@ -89,11 +90,11 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
 
         if (!notified) {
             notified = true;
-            ctx.post([=]() { callback({}); });
+            boost::asio::post(ctx, [=]() { callback({}); });
         }
     } else {
         std::cerr << "[youtube-dl source] pipe read error: " << e.message() << "\n";
-        ctx.post([=]() { callback(e); });
+        boost::asio::post(ctx, [=]() { callback(e); });
     }
 }
 

@@ -22,28 +22,6 @@ namespace discord
 class gateway : public beatable
 {
 public:
-    enum class error {
-        unknown_error = 4000,
-        unknown_opcode = 4001,
-        decode_error = 4002,
-        not_authenticated = 4003,
-        authentication_failed = 4004,
-        already_authenticated = 4005,
-        invalid_seq = 4007,
-        rate_limited = 4008,
-        session_timeout = 4009,
-        invalid_shard = 4010,
-        sharding_required = 4011
-    };
-
-    struct error_category : public boost::system::error_category {
-        virtual const char *name() const noexcept;
-        virtual std::string message(int ev) const noexcept;
-        virtual bool equivalent(const boost::system::error_code &code, int condition) const
-            noexcept;
-        static const boost::system::error_category &instance();
-    };
-
     gateway(boost::asio::io_context &ctx, const std::string &token,
             boost::asio::ip::tcp::resolver &resolver);
     ~gateway();
@@ -59,7 +37,7 @@ public:
 
 private:
     boost::asio::io_context &ctx;
-    websocket websock;
+    std::shared_ptr<websocket> websock;
     discord::delayed_message_sender sender;
     discord::gateway_store store;
 
@@ -88,12 +66,6 @@ private:
     void event_loop();
     void handle_event(const uint8_t *data, size_t len);
 };
-
-boost::system::error_code make_error_code(discord::gateway::error code) noexcept;
 }
-
-template<>
-struct boost::system::is_error_code_enum<discord::gateway::error> : public boost::true_type {
-};
 
 #endif

@@ -3,6 +3,7 @@
 
 #include <boost/asio.hpp>
 #include <deque>
+#include <memory>
 #include <string>
 
 #include <callbacks.h>
@@ -13,14 +14,13 @@ namespace discord
 class delayed_message_sender
 {
 public:
-    delayed_message_sender(boost::asio::io_context &service, websocket &websocket, int delay_ms);
+    delayed_message_sender(std::shared_ptr<websocket> websocket, int delay_ms);
     void safe_send(const std::string &s, transfer_cb c);
 
 private:
-    boost::asio::io_context &ctx;
     boost::asio::deadline_timer send_timer;
     boost::asio::io_context::strand timer_strand;
-    websocket &websock;
+    std::shared_ptr<websocket> websock;
     std::deque<std::string> write_queue;
     std::deque<transfer_cb> callback_queue;
     int delay_ms;

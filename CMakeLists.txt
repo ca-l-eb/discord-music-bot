@@ -18,9 +18,11 @@ set(SOURCE_FILES
         src/callbacks.cc
         src/delayed_message_sender.cc
         src/discord.cc
+        src/errors.cc
         src/events/echo_listener.cc
         src/events/hello_responder.cc
         src/gateway.cc
+        src/gateway_store.cc
         src/heartbeater.cc
         src/net/base64.cc
         src/net/http_response.cc
@@ -32,7 +34,6 @@ set(SOURCE_FILES
         src/voice/opus_encoder.cc
         src/voice/voice_gateway.cc
         src/voice/voice_state_listener.cc
-        src/gateway_store.cc
         )
 
 set(HEADER_FILES
@@ -42,10 +43,12 @@ set(HEADER_FILES
         src/callbacks.h
         src/delayed_message_sender
         src/discord.h
+        src/errors.h
         src/events/echo_listener.h
         src/events/event_listener.h
         src/events/hello_responder.h
         src/gateway.h
+        src/gateway_store.h
         src/heartbeater.h
         src/net/base64.h
         src/net/http_request.h
@@ -58,7 +61,6 @@ set(HEADER_FILES
         src/voice/opus_encoder.h
         src/voice/voice_gateway.h
         src/voice/voice_state_listener.h
-        src/gateway_store.h
         )
 
 add_executable(discord src/main.cc ${SOURCE_FILES} ${HEADER_FILES})

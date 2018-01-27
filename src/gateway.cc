@@ -1,6 +1,7 @@
 #include <iostream>
 #include <memory>
 
+#include <errors.h>
 #include <gateway.h>
 #include <voice/voice_state_listener.h>
 
@@ -8,8 +9,8 @@ discord::gateway::gateway(boost::asio::io_context &ctx, const std::string &token
                           boost::asio::ip::tcp::resolver &resolver)
     : resolver{resolver}
     , ctx{ctx}
-    , websock{ctx}
-    , sender{ctx, websock, 500}
+    , websock{std::make_unique<websocket>(ctx)}
+    , sender{websock, 500}
     , token{token}
     , state{connection_state::disconnected}
 {
@@ -32,8 +33,8 @@ discord::gateway::gateway(boost::asio::io_context &ctx, const std::string &token
     add_listener("MESSAGE_CREATE", "voice_gateway_listener", handler);
 
     // Establish the WebSocket connection
-    websock.async_connect("wss://gateway.discord.gg/?v=6&encoding=json", resolver,
-                          [&](auto &ec) { on_connect(ec); });
+    websock->async_connect("wss://gateway.discord.gg/?v=6&encoding=json", resolver,
+                           [&](auto &ec) { on_connect(ec); });
 }
 
 discord::gateway::~gateway() {}
@@ -113,7 +114,7 @@ void discord::gateway::resume()
         throw std::runtime_error("Could not resume previous session: no such session");
 
     // Close the previous connection and create a new websocket
-    websock.close(websocket::status_code::going_away);
+    websock->close(websocket::status_code::going_away);
     //    websock.connect("wss://gateway.discord.gg/?v=6&encoding=json");
 
     nlohmann::json resume_payload{
@@ -172,9 +173,9 @@ void discord::gateway::event_loop()
 {
     auto callback = [&](auto &e, auto *data, auto len) {
         if (e) {
-            if (e == websocket::error::websocket_connection_closed) {
+            if (e == websocket_errc::websocket_connection_closed) {
                 // Convert the close code to a gateway error message
-                auto ec = make_error_code(static_cast<gateway::error>(websock.close_code()));
+                auto ec = make_error_code(static_cast<gateway_errc>(websock->close_code()));
                 throw std::runtime_error(ec.message());
             }
             throw std::runtime_error("There was an error: " + e.message());
@@ -183,7 +184,7 @@ void discord::gateway::event_loop()
         }
     };
     // Asynchronously read next message, on message received send it to listeners
-    websock.async_next_message(callback);
+    websock->async_next_message(callback);
 }
 
 void discord::gateway::handle_event(const uint8_t *data, size_t len)
@@ -242,55 +243,4 @@ void discord::gateway::handle_event(const uint8_t *data, size_t len)
         std::cerr << "[gateway] " << e.what() << "\n";
     }
     event_loop();
-}
-
-const char *discord::gateway::error_category::name() const noexcept
-{
-    return "gateway";
-}
-
-std::string discord::gateway::error_category::message(int ev) const noexcept
-{
-    switch (error(ev)) {
-        case error::unknown_error:
-            return "unknown error";
-        case error::unknown_opcode:
-            return "invalid opcode";
-        case error::decode_error:
-            return "decode error";
-        case error::not_authenticated:
-            return "sent payload before identified";
-        case error::authentication_failed:
-            return "incorrect token in identify payload";
-        case error::already_authenticated:
-            return "sent more than one identify payload";
-        case error::invalid_seq:
-            return "invalid sequence number";
-        case error::rate_limited:
-            return "rate limited";
-        case error::session_timeout:
-            return "session has timed out";
-        case error::invalid_shard:
-            return "invalid shard";
-        case error::sharding_required:
-            return "sharding required";
-    }
-    return "Unknown gateway error";
-}
-
-bool discord::gateway::error_category::equivalent(const boost::system::error_code &code,
-                                                  int condition) const noexcept
-{
-    return &code.category() == this && static_cast<int>(code.value()) == condition;
-}
-
-const boost::system::error_category &discord::gateway::error_category::instance()
-{
-    static discord::gateway::error_category instance;
-    return instance;
-}
-
-boost::system::error_code discord::make_error_code(discord::gateway::error code) noexcept
-{
-    return {(int) code, discord::gateway::error_category::instance()};
 }

@@ -20,29 +20,6 @@ struct voice_gateway_entry;
 class voice_gateway : public beatable
 {
 public:
-    enum class error {
-        ip_discovery_failed = 1,
-        unknown_opcode = 4001,
-        not_authenticated = 4003,
-        authentication_failed = 4004,
-        already_authenticated = 4005,
-        session_no_longer_valid = 4006,
-        session_timeout = 4009,
-        server_not_found = 4011,
-        unknown_protocol = 4012,
-        disconnected = 4014,
-        voice_server_crashed = 4015,
-        unknown_encryption_mode = 4016
-    };
-
-    struct error_category : public boost::system::error_category {
-        virtual const char *name() const noexcept;
-        virtual std::string message(int ev) const noexcept;
-        virtual bool equivalent(const boost::system::error_code &code, int condition) const
-            noexcept;
-        static const boost::system::error_category &instance();
-    };
-
     voice_gateway(boost::asio::io_context &ctx, discord::voice_gateway_entry &e, uint64_t user_id);
     ~voice_gateway();
 
@@ -54,7 +31,7 @@ public:
 
 private:
     boost::asio::io_context &ctx;
-    websocket websock;
+    std::shared_ptr<websocket> websock;
     discord::delayed_message_sender sender;
     discord::voice_gateway_entry &entry;
     boost::asio::ip::udp::socket socket;
@@ -94,12 +71,6 @@ private:
     void notify_heartbeater_hello(nlohmann::json &data);
     void select(uint16_t local_udp_port);
 };
-
-boost::system::error_code make_error_code(discord::voice_gateway::error code) noexcept;
 }
-
-template<>
-struct boost::system::is_error_code_enum<discord::voice_gateway::error> : public boost::true_type {
-};
 
 #endif
