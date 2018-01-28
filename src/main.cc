@@ -2,8 +2,9 @@
 #include <cstdlib>
 #include <iostream>
 #include <thread>
+#include <boost/asio/ssl.hpp>
 
-#include <api.h>
+#include <aliases.h>
 #include <events/echo_listener.h>
 #include <events/hello_responder.h>
 #include <gateway.h>
@@ -26,14 +27,10 @@ int main(int argc, char *argv[])
         av_register_all();  // Initialize libavformat
 
         boost::asio::io_context ctx;
-        boost::asio::ip::tcp::resolver resolver{ctx};
-        //        discord::api api{token};
-        discord::gateway gateway{ctx, token, resolver};
-
-        //        gateway.add_listener("ALL", "echo",
-        //        std::make_shared<discord::echo_listener>());
-        //        gateway.add_listener("MESSAGE_CREATE", "hello_responder",
-        //                             std::make_shared<discord::hello_responder>(api));
+        ssl::context tls{ssl::context::tls_client};
+        tls.set_default_verify_paths();
+        tls.set_verify_mode(ssl::context::verify_peer);
+        auto gateway = std::make_shared<discord::gateway>(ctx, tls, token);
 
         ctx.run();
     } catch (std::exception &e) {

@@ -10,16 +10,6 @@ add_executable(test_json
     ../src/gateway_store.cc
     ../src/gateway_store.h
     )
-add_executable(http_request
-    ../src/net/http_request.h
-    ../src/net/http_request.cc
-    ../src/net/http_response.h
-    ../src/net/http_response.cc
-    http_request.cc
-    )
 
 target_link_libraries(test_json ${GTEST_LIBRARIES})
 target_include_directories(test_json PUBLIC ${CMAKE_SOURCE_DIR}/src)
-
-target_link_libraries(http_request ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES} ${OPENSSL_LIBRARIES})
-target_include_directories(http_request PUBLIC ${CMAKE_SOURCE_DIR}/src)

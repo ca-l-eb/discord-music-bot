@@ -1,3 +1,4 @@
+#include <functional>
 #include <iostream>
 #include <memory>
 
@@ -5,12 +6,11 @@
 #include <gateway.h>
 #include <voice/voice_state_listener.h>
 
-discord::gateway::gateway(boost::asio::io_context &ctx, const std::string &token,
-                          boost::asio::ip::tcp::resolver &resolver)
-    : resolver{resolver}
-    , ctx{ctx}
-    , websock{std::make_unique<websocket>(ctx)}
-    , sender{websock, 500}
+discord::gateway::gateway(boost::asio::io_context &ctx, ssl::context &tls, const std::string &token)
+    : ctx{ctx}
+    , tls{tls}
+    , resolver{ctx}
+    , websock{ctx, tls}
     , token{token}
     , state{connection_state::disconnected}
 {
@@ -32,18 +32,52 @@ discord::gateway::gateway(boost::asio::io_context &ctx, const std::string &token
     add_listener("VOICE_SERVER_UPDATE", "voice_gateway_listener", handler);
     add_listener("MESSAGE_CREATE", "voice_gateway_listener", handler);
 
-    // Establish the WebSocket connection
-    websock->async_connect("wss://gateway.discord.gg/?v=6&encoding=json", resolver,
-                           [&](auto &ec) { on_connect(ec); });
+    tcp::resolver::query query{"gateway.discord.gg", "443"};
+    resolver.async_resolve(query, std::bind(&gateway::on_resolve, shared_from_this(),
+                                            std::placeholders::_1, std::placeholders::_2));
 }
 
 discord::gateway::~gateway() {}
 
-void discord::gateway::on_connect(const boost::system::error_code &e)
+void discord::gateway::on_resolve(const boost::system::error_code &ec, tcp::resolver::iterator it)
 {
-    if (e) {
-        throw std::runtime_error("Could not connect: " + e.message());
+    if (ec) {
+        throw std::runtime_error("Could not resolve host: " + ec.message());
     }
+
+    boost::asio::async_connect(
+        websock.next_layer().lowest_layer(), it,
+        std::bind(&gateway::on_connect, shared_from_this(), std::placeholders::_1));
+}
+
+void discord::gateway::on_connect(const boost::system::error_code &ec)
+{
+    if (ec) {
+        throw std::runtime_error("Could not connect: " + ec.message());
+    }
+
+    websock.next_layer().async_handshake(
+        ssl::stream_base::client,
+        std::bind(&gateway::on_tls_handshake, shared_from_this(), std::placeholders::_1));
+}
+
+void discord::gateway::on_tls_handshake(const boost::system::error_code &ec)
+{
+    if (ec) {
+        throw std::runtime_error{"TLS handshake error: " + ec.message()};
+    }
+
+    websock.async_handshake(
+        "gateway.discord.gg", "/?v=6&encoding=json",
+        std::bind(&gateway::on_websocket_handshake, shared_from_this(), std::placeholders::_1));
+}
+
+void discord::gateway::on_websocket_handshake(const boost::system::error_code &ec)
+{
+    if (ec) {
+        throw std::runtime_error("Could not complete websocket handshake: " + ec.message());
+    }
+
     std::cout << "[gateway] connected! sending identify\n";
     identify();
 }
@@ -69,7 +103,10 @@ void discord::gateway::remove_listener(const std::string &event_name,
 
 void discord::gateway::send(const std::string &s, transfer_cb c)
 {
-    sender.safe_send(s, c);
+    // TODO: use strand + message queue + timer for delay
+    boost::system::error_code ec;
+    auto wrote = websock.write(boost::asio::buffer(s), ec);
+    c(ec, wrote);
 }
 
 void discord::gateway::heartbeat()
@@ -113,9 +150,7 @@ void discord::gateway::resume()
     if (session_id.empty())
         throw std::runtime_error("Could not resume previous session: no such session");
 
-    // Close the previous connection and create a new websocket
-    websock->close(websocket::status_code::going_away);
-    //    websock.connect("wss://gateway.discord.gg/?v=6&encoding=json");
+    // TODO: Close the previous connection and create a new websocket
 
     nlohmann::json resume_payload{
         {"op", static_cast<int>(gateway_op::resume)},
@@ -169,33 +204,32 @@ void discord::gateway::on_ready(nlohmann::json &data)
     session_id = std::move(ready.session_id);
 }
 
-void discord::gateway::event_loop()
+void discord::gateway::on_read(const boost::system::error_code &ec, size_t transferred)
 {
-    auto callback = [&](auto &e, auto *data, auto len) {
-        if (e) {
-            if (e == websocket_errc::websocket_connection_closed) {
-                // Convert the close code to a gateway error message
-                auto ec = make_error_code(static_cast<gateway_errc>(websock->close_code()));
-                throw std::runtime_error(ec.message());
-            }
-            throw std::runtime_error("There was an error: " + e.message());
-        } else {
-            handle_event(data, len);
-        }
-    };
-    // Asynchronously read next message, on message received send it to listeners
-    websock->async_next_message(callback);
+    if (ec) {
+        // TODO: if close code, convert to gateway error code
+        std::cerr << "[gateway] error reading message: " << ec.message() << "\n";
+    } else {
+        auto data = boost::beast::buffers_to_string(buffer);
+        handle_event(data);
+        buffer.consume(transferred);
+    }
 }
 
-void discord::gateway::handle_event(const uint8_t *data, size_t len)
+void discord::gateway::event_loop()
 {
-    const char *start = reinterpret_cast<const char *>(data);
-    const char *end = start + len;
+    // Asynchronously read next message, on message received send it to listeners
+    websock.async_read(buffer, std::bind(&gateway::on_read, shared_from_this(),
+                                         std::placeholders::_1, std::placeholders::_2));
+}
+
+void discord::gateway::handle_event(const std::string &data)
+{
     std::cout << "[gateway] ";
-    std::cout.write(start, len);
+    std::cout.write(data.c_str(), data.size());
     std::cout << "\n";
     try {
-        auto json = nlohmann::json::parse(start, end);
+        auto json = nlohmann::json::parse(data);
         auto payload = json.get<discord::payload>();
         seq_num = payload.sequence_num;
 

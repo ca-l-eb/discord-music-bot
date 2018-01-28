@@ -16,7 +16,6 @@ set(SOURCE_FILES
         src/api.cc
         src/audio_source/youtube_dl.cc
         src/callbacks.cc
-        src/delayed_message_sender.cc
         src/discord.cc
         src/errors.cc
         src/events/echo_listener.cc
@@ -24,11 +23,7 @@ set(SOURCE_FILES
         src/gateway.cc
         src/gateway_store.cc
         src/heartbeater.cc
-        src/net/base64.cc
-        src/net/http_response.cc
         src/net/resource_parser.cc
-        src/net/send_queue.cc
-        src/net/websocket.cc
         src/voice/crypto.cc
         src/voice/decoding.cc
         src/voice/opus_encoder.cc
@@ -37,11 +32,11 @@ set(SOURCE_FILES
         )
 
 set(HEADER_FILES
+        src/aliases.h
         src/api.h
         src/audio_source/source.h
         src/audio_source/youtube_dl.h
         src/callbacks.h
-        src/delayed_message_sender
         src/discord.h
         src/errors.h
         src/events/echo_listener.h
@@ -50,12 +45,7 @@ set(HEADER_FILES
         src/gateway.h
         src/gateway_store.h
         src/heartbeater.h
-        src/net/base64.h
-        src/net/http_request.h
-        src/net/http_response.h
         src/net/resource_parser.h
-        src/net/send_queue.h
-        src/net/websocket.h
         src/voice/crypto.h
         src/voice/decoding.h
         src/voice/opus_encoder.h
@@ -65,4 +55,4 @@ set(HEADER_FILES
 
 add_executable(discord src/main.cc ${SOURCE_FILES} ${HEADER_FILES})
 target_link_libraries(discord ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES} ${OPENSSL_LIBRARIES} ${FFMPEG_LIBRARIES} opus sodium)
-target_include_directories(discord PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(discord PUBLIC ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/libs)

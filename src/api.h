@@ -1,9 +1,9 @@
 #ifndef CMD_DISCORD_API_H
 #define CMD_DISCORD_API_H
 
+#include <map>
 #include <mutex>
-
-#include <net/http_request.h>
+#include <chrono>
 
 namespace discord
 {

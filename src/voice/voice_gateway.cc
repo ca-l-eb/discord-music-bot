@@ -13,11 +13,9 @@
 static void write_rtp_header(unsigned char *buffer, uint16_t seq_num, uint32_t timestamp,
                              uint32_t ssrc);
 
-discord::voice_gateway::voice_gateway(boost::asio::io_context &ctx, discord::voice_gateway_entry &e,
-                                      uint64_t user_id)
+discord::voice_gateway::voice_gateway(boost::asio::io_context &ctx,
+                                      std::shared_ptr<voice_gateway_entry> e, uint64_t user_id)
     : ctx{ctx}
-    , websock{std::make_shared<websocket>(ctx)}
-    , sender{websock, 500}
     , entry{e}
     , socket{ctx}
     , resolver{ctx}
@@ -34,7 +32,7 @@ discord::voice_gateway::voice_gateway(boost::asio::io_context &ctx, discord::voi
     std::cout << "[voice] connecting to gateway " << entry.endpoint << " user_id[" << user_id
               << "] session_id[" << entry.session_id << "] token[" << entry.token << "]\n";
 
-    socket.open(boost::asio::ip::udp::v4());
+    socket.open(udp::v4());
     std::cout << "[voice] created udp socket\n";
 }
 
@@ -43,11 +41,12 @@ discord::voice_gateway::~voice_gateway()
     std::cout << "[voice] gateway destructor\n";
 }
 
-void discord::voice_gateway::connect(boost::asio::ip::tcp::resolver &resolver, error_cb c)
+void discord::voice_gateway::connect(error_cb c)
 {
     voice_connect_callback = c;
     auto websock_connect_cb = [&](auto &ec) { on_connect(ec); };
     // Make sure we're using voice gateway v3
+
     websock->async_connect("wss://" + entry.endpoint + "/?v=3", resolver, websock_connect_cb);
 }
 
@@ -188,10 +187,9 @@ void discord::voice_gateway::extract_ready_info(nlohmann::json &data)
     // Parse the endpoint url, extracting only the host
     auto parsed_results = resource_parser::parse(entry.endpoint);
     host = parsed_results.host;
-    boost::asio::ip::udp::resolver::query query{boost::asio::ip::udp::v4(), host,
-                                                std::to_string(udp_port)};
-    resolver.async_resolve(query, [&](const boost::system::error_code &e,
-                                      boost::asio::ip::udp::resolver::iterator iterator) {
+    udp::resolver::query query{udp::v4(), host, std::to_string(udp_port)};
+    udp_resolver.async_resolve(query, [&](const boost::system::error_code &e,
+                                          udp::resolver::iterator iterator) {
         if (e) {
             boost::asio::post(ctx, [&]() { voice_connect_callback(e); });
         } else {

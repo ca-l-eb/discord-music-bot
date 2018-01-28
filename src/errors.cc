@@ -1,44 +1,5 @@
 #include <errors.h>
 
-const char *websocket_error_category::name() const noexcept
-{
-    return "WebSocket";
-}
-
-std::string websocket_error_category::message(int ev) const noexcept
-{
-    switch (websocket_errc(ev)) {
-        case websocket_errc::websocket_connection_closed:
-            return "The WebSocket connection has closed";
-        case websocket_errc::server_masked_data:
-            return "The server sent masked data";
-        case websocket_errc::upgrade_failed:
-            return "WebSocket upgrade failed";
-        case websocket_errc::bad_upgrade_key:
-            return "The server sent a bad Sec-WebSocket-Accept";
-        case websocket_errc::no_upgrade_key:
-            return "No Sec-WebSocket-Accept returned by server";
-    }
-    return "Unknown WebSocket error";
-}
-
-bool websocket_error_category::equivalent(const boost::system::error_code &code,
-                                          int condition) const noexcept
-{
-    return &code.category() == this && static_cast<int>(code.value()) == condition;
-}
-
-const boost::system::error_category &websocket_error_category::instance()
-{
-    static websocket_error_category instance;
-    return instance;
-}
-
-boost::system::error_code make_error_code(websocket_errc code) noexcept
-{
-    return {(int) code, websocket_error_category::instance()};
-}
-
 const char *gateway_error_category::name() const noexcept
 {
     return "gateway";

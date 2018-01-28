@@ -4,26 +4,28 @@
 #include <condition_variable>
 #include <iostream>
 #include <json.hpp>
+#include <memory>
 #include <mutex>
 #include <thread>
 
-#include <api.h>
+#include <boost/asio.hpp>
+#include <boost/asio/ssl.hpp>
+#include <boost/beast.hpp>
+
+#include <aliases.h>
 #include <callbacks.h>
-#include <delayed_message_sender.h>
 #include <discord.h>
 #include <events/event_listener.h>
 #include <gateway_store.h>
 #include <heartbeater.h>
-#include <net/websocket.h>
 #include <voice/voice_gateway.h>
 
 namespace discord
 {
-class gateway : public beatable
+class gateway : public beatable, std::enable_shared_from_this<gateway>
 {
 public:
-    gateway(boost::asio::io_context &ctx, const std::string &token,
-            boost::asio::ip::tcp::resolver &resolver);
+    gateway(boost::asio::io_context &ctx, ssl::context &tls, const std::string &token);
     ~gateway();
     void add_listener(const std::string &event_name, const std::string &handler_name,
                       event_listener::ptr h);
@@ -33,12 +35,12 @@ public:
     uint64_t get_user_id() const;
     const std::string &get_session_id() const;
 
-    boost::asio::ip::tcp::resolver &resolver;
-
 private:
     boost::asio::io_context &ctx;
-    std::shared_ptr<websocket> websock;
-    discord::delayed_message_sender sender;
+    ssl::context &tls;
+    tcp::resolver resolver;
+    secure_websocket websock;
+    boost::beast::multi_buffer buffer;
     discord::gateway_store store;
 
     // Map an event name (e.g. READY, RESUMED, etc.) to a handler name
@@ -57,14 +59,19 @@ private:
     const int large_threshold = 250;
     enum class connection_state { disconnected, connected } state;
 
+    void on_resolve(const boost::system::error_code &ec, tcp::resolver::iterator it);
+    void on_connect(const boost::system::error_code &ec);
+    void on_tls_handshake(const boost::system::error_code &ec);
+    void on_websocket_handshake(const boost::system::error_code &ec);
+    void on_read(const boost::system::error_code &ec, size_t transferred);
+
     void run_public_dispatch(gateway_op op, nlohmann::json &data, const std::string &t);
     void run_gateway_dispatch(nlohmann::json &data, const std::string &event_name);
     void identify();
     void resume();
-    void on_connect(const boost::system::error_code &e);
     void on_ready(nlohmann::json &data);
     void event_loop();
-    void handle_event(const uint8_t *data, size_t len);
+    void handle_event(const std::string &data);
 };
 }
 
