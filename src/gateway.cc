@@ -1,4 +1,3 @@
-#include <functional>
 #include <iostream>
 #include <memory>
 
@@ -8,9 +7,9 @@
 
 discord::gateway::gateway(boost::asio::io_context &ctx, ssl::context &tls, const std::string &token)
     : ctx{ctx}
-    , tls{tls}
     , resolver{ctx}
     , websock{ctx, tls}
+    , beater{ctx}
     , token{token}
     , state{connection_state::disconnected}
 {
@@ -27,17 +26,18 @@ discord::gateway::gateway(boost::asio::io_context &ctx, ssl::context &tls, const
                               [&](nlohmann::json &) { state = connection_state::connected; });
 
     // Add listener for voice events
-    auto handler = std::make_shared<voice_state_listener>(ctx, *this, store);
+    auto handler = std::make_shared<voice_state_listener>(ctx, *this, store, tls);
     add_listener("VOICE_STATE_UPDATE", "voice_gateway_listener", handler);
     add_listener("VOICE_SERVER_UPDATE", "voice_gateway_listener", handler);
     add_listener("MESSAGE_CREATE", "voice_gateway_listener", handler);
-
-    tcp::resolver::query query{"gateway.discord.gg", "443"};
-    resolver.async_resolve(query, std::bind(&gateway::on_resolve, shared_from_this(),
-                                            std::placeholders::_1, std::placeholders::_2));
 }
 
-discord::gateway::~gateway() {}
+void discord::gateway::run()
+{
+    tcp::resolver::query query{"gateway.discord.gg", "443"};
+    resolver.async_resolve(
+        query, [self = shared_from_this()](auto &ec, auto it) { self->on_resolve(ec, it); });
+}
 
 void discord::gateway::on_resolve(const boost::system::error_code &ec, tcp::resolver::iterator it)
 {
@@ -46,19 +46,21 @@ void discord::gateway::on_resolve(const boost::system::error_code &ec, tcp::reso
     }
 
     boost::asio::async_connect(
-        websock.next_layer().lowest_layer(), it,
-        std::bind(&gateway::on_connect, shared_from_this(), std::placeholders::_1));
+        websock.next_layer().next_layer(),
+        it, [self = shared_from_this()](auto &ec, auto it) { self->on_connect(ec, it); });
 }
 
-void discord::gateway::on_connect(const boost::system::error_code &ec)
+void discord::gateway::on_connect(const boost::system::error_code &ec, tcp::resolver::iterator)
 {
     if (ec) {
         throw std::runtime_error("Could not connect: " + ec.message());
     }
 
+    // Connected to endpoint
     websock.next_layer().async_handshake(
-        ssl::stream_base::client,
-        std::bind(&gateway::on_tls_handshake, shared_from_this(), std::placeholders::_1));
+        ssl::stream_base::client, [self = shared_from_this()](auto &ec) {
+            self->on_tls_handshake(ec);
+        });
 }
 
 void discord::gateway::on_tls_handshake(const boost::system::error_code &ec)
@@ -67,9 +69,10 @@ void discord::gateway::on_tls_handshake(const boost::system::error_code &ec)
         throw std::runtime_error{"TLS handshake error: " + ec.message()};
     }
 
-    websock.async_handshake(
-        "gateway.discord.gg", "/?v=6&encoding=json",
-        std::bind(&gateway::on_websocket_handshake, shared_from_this(), std::placeholders::_1));
+    websock.async_handshake("gateway.discord.gg",
+                            "/?v=6&encoding=json", [self = shared_from_this()](auto &ec) {
+                                self->on_websocket_handshake(ec);
+                            });
 }
 
 void discord::gateway::on_websocket_handshake(const boost::system::error_code &ec)
@@ -131,10 +134,6 @@ void discord::gateway::identify()
             std::cerr << "[gateway] identify send error: " << e.message() << "\n";
         } else {
             std::cout << "[gateway] sucessfully sent identify payload... beginning event loop\n";
-
-            // Create heartbeater for this gateway
-            beater = std::make_unique<discord::heartbeater>(ctx, *this);
-
             event_loop();
         }
     };
@@ -207,10 +206,10 @@ void discord::gateway::on_ready(nlohmann::json &data)
 void discord::gateway::on_read(const boost::system::error_code &ec, size_t transferred)
 {
     if (ec) {
-        // TODO: if close code, convert to gateway error code
+        // TODO: if close code, convert to gate ay error code
         std::cerr << "[gateway] error reading message: " << ec.message() << "\n";
     } else {
-        auto data = boost::beast::buffers_to_string(buffer);
+        auto data = boost::beast::buffers_to_string(buffer.data());
         handle_event(data);
         buffer.consume(transferred);
     }
@@ -219,8 +218,9 @@ void discord::gateway::on_read(const boost::system::error_code &ec, size_t trans
 void discord::gateway::event_loop()
 {
     // Asynchronously read next message, on message received send it to listeners
-    websock.async_read(buffer, std::bind(&gateway::on_read, shared_from_this(),
-                                         std::placeholders::_1, std::placeholders::_2));
+    websock.async_read(buffer, [self = shared_from_this()](auto &ec, auto transferred) {
+        self->on_read(ec, transferred);
+    });
 }
 
 void discord::gateway::handle_event(const std::string &data)
@@ -264,10 +264,10 @@ void discord::gateway::handle_event(const std::string &data)
                 }
                 break;
             case gateway_op::hello:
-                beater->on_hello(payload.data);
+                beater.on_hello(payload.data, *this);
                 break;
             case gateway_op::heartbeat_ack:
-                beater->on_heartbeat_ack();
+                beater.on_heartbeat_ack();
                 break;
             default:
                 throw std::runtime_error("Unknown opcode: " +

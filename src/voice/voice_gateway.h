@@ -17,14 +17,14 @@ namespace discord
 {
 struct voice_gateway_entry;
 
-class voice_gateway : public beatable, std::enable_shared_from_this<voice_gateway>
+class voice_gateway : public std::enable_shared_from_this<voice_gateway>
 {
 public:
-    voice_gateway(boost::asio::io_context &ctx, std::shared_ptr<discord::voice_gateway_entry> e,
-                  uint64_t user_id);
+    voice_gateway(boost::asio::io_context &ctx, ssl::context &tls,
+                  std::shared_ptr<discord::voice_gateway_entry> e, uint64_t user_id);
     ~voice_gateway();
 
-    void heartbeat() override;
+    void heartbeat();
     void send(const std::string &s, transfer_cb c);
     void connect(error_cb c);
     void play(audio_frame frame);
@@ -35,10 +35,11 @@ private:
     ssl::context &tls;
     tcp::resolver tcp_resolver;
     secure_websocket websock;
-    boost::beast::multi_buffer multi_buffer;
-    std::shared_ptr<discord::voice_gateway_entry> entry;
 
-    udp::socket socket;
+    std::shared_ptr<discord::voice_gateway_entry> entry;
+    boost::beast::multi_buffer multi_buffer;
+
+    udp::socket udp_socket;
     udp::endpoint send_endpoint, receive_endpoint;
     udp::resolver udp_resolver;
     boost::asio::deadline_timer timer;
@@ -52,7 +53,8 @@ private:
     uint32_t timestamp;
     uint16_t seq_num;
 
-    std::unique_ptr<heartbeater> beater;
+    heartbeater beater;
+
     enum class connection_state { disconnected, connected } state;
 
     int retries;
@@ -67,13 +69,18 @@ private:
     void resume();
     void event_loop();
     void handle_event(const std::string &data);
-    void on_connect(const boost::system::error_code &e);
     void extract_ready_info(nlohmann::json &data);
     void extract_session_info(nlohmann::json &data);
     void ip_discovery();
     void send_ip_discovery_datagram();
     void notify_heartbeater_hello(nlohmann::json &data);
     void select(uint16_t local_udp_port);
+
+    void on_resolve(const boost::system::error_code &ec, tcp::resolver::iterator it);
+    void on_connect(const boost::system::error_code &ec, tcp::resolver::iterator);
+    void on_tls_handshake(const boost::system::error_code &ec);
+    void on_websocket_handshake(const boost::system::error_code &ec);
+    void on_read(const boost::system::error_code &ec, size_t transferred);
 };
 }
 

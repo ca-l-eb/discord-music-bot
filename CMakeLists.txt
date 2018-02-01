@@ -22,7 +22,6 @@ set(SOURCE_FILES
         src/events/hello_responder.cc
         src/gateway.cc
         src/gateway_store.cc
-        src/heartbeater.cc
         src/net/resource_parser.cc
         src/voice/crypto.cc
         src/voice/decoding.cc

@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <boost/process.hpp>
 #include <iostream>
 #include <regex>
 
@@ -36,8 +35,9 @@ static void update_bitrate(discord::voice_gateway_entry &entry, discord::gateway
 
 discord::voice_state_listener::voice_state_listener(boost::asio::io_context &ctx,
                                                     discord::gateway &gateway,
-                                                    discord::gateway_store &store)
-    : ctx{ctx}, gateway{gateway}, store{store}
+                                                    discord::gateway_store &store,
+                                                    ssl::context &tls)
+    : ctx{ctx}, gateway{gateway}, store{store}, tls{tls}
 {
 }
 
@@ -67,10 +67,10 @@ void discord::voice_state_listener::voice_state_update(const nlohmann::json &dat
 
     // Create the entry if it doesn't exist
     if (voice_gateways.count(state.guild_id) == 0) {
-        voice_gateways[state.guild_id] = voice_gateway_entry{};
+        voice_gateways[state.guild_id] = std::make_shared<voice_gateway_entry>();
     }
 
-    auto &entry = voice_gateways[state.guild_id];
+    auto &entry = *voice_gateways[state.guild_id];
     entry.channel_id = state.channel_id;
     entry.guild_id = state.guild_id;
     entry.session_id = std::move(state.session_id);
@@ -89,22 +89,23 @@ void discord::voice_state_listener::voice_server_update(const nlohmann::json &da
     }
 
     auto &entry = it->second;
-    assert(vsu.guild_id == entry.guild_id);
-    entry.token = std::move(vsu.token);
-    entry.endpoint = std::move(vsu.endpoint);
+    assert(vsu.guild_id == entry->guild_id);
+    entry->token = std::move(vsu.token);
+    entry->endpoint = std::move(vsu.endpoint);
 
     auto gateway_connect_cb = [&](const boost::system::error_code &e) {
         if (e) {
             std::cerr << "[voice state] voice gateway connection error: " << e.message() << "\n";
         } else {
             std::cout << "[voice state] connected to voice gateway. Ready to send audio\n";
-            entry.p_state = voice_gateway_entry::state::connected;
+            entry->p_state = voice_gateway_entry::state::connected;
         }
     };
 
     // We got all the information needed to join a voice gateway now
-    entry.gateway = std::make_unique<discord::voice_gateway>(ctx, entry, gateway.get_user_id());
-    entry.gateway->connect(gateway.resolver, gateway_connect_cb);
+    entry->gateway =
+        std::make_shared<discord::voice_gateway>(ctx, tls, entry, gateway.get_user_id());
+    entry->gateway->connect(gateway_connect_cb);
 }
 
 // Listen for guild text messages indicating to join, leave, play, pause, etc.
@@ -141,7 +142,7 @@ void discord::voice_state_listener::check_command(const discord::message &m)
     if (command == "join") {
         do_join(m, params);
     } else if (it != voice_gateways.end()) {
-        auto &entry = it->second;
+        auto &entry = *it->second;
         if (command == "leave")
             do_leave(entry);
         else if (command == "list" || command == "l")
@@ -172,7 +173,7 @@ void discord::voice_state_listener::do_join(const discord::message &m, const std
         if (channel.type == discord::channel::channel_type::guild_voice && channel.name == s) {
             // Found a matching voice channel name! Join it if it is different than the currently
             // connected channel (if any)
-            if (!connected || it->second.channel_id != channel.id) {
+            if (!connected || it->second->channel_id != channel.id) {
                 join_voice_server(guild->id, channel.id);
                 return;
             }

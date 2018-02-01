@@ -22,26 +22,27 @@
 
 namespace discord
 {
-class gateway : public beatable, std::enable_shared_from_this<gateway>
+class gateway : public std::enable_shared_from_this<gateway>
 {
 public:
     gateway(boost::asio::io_context &ctx, ssl::context &tls, const std::string &token);
-    ~gateway();
+    ~gateway() = default;
+    void run();
     void add_listener(const std::string &event_name, const std::string &handler_name,
                       event_listener::ptr h);
     void remove_listener(const std::string &event_name, const std::string &handler_name);
-    void heartbeat() override;
+    void heartbeat();
     void send(const std::string &s, transfer_cb c);
     uint64_t get_user_id() const;
     const std::string &get_session_id() const;
 
 private:
     boost::asio::io_context &ctx;
-    ssl::context &tls;
     tcp::resolver resolver;
     secure_websocket websock;
     boost::beast::multi_buffer buffer;
     discord::gateway_store store;
+    heartbeater beater;
 
     // Map an event name (e.g. READY, RESUMED, etc.) to a handler name
     std::multimap<std::string, std::string> event_name_to_handler_name;
@@ -50,7 +51,6 @@ private:
     std::map<std::string, event_listener::ptr> handler_name_to_handler_ptr;
     std::map<std::string, std::function<void(nlohmann::json &)>> gateway_event_map;
 
-    std::unique_ptr<heartbeater> beater;
     std::string token;
     std::string session_id;
     uint64_t user_id;
@@ -60,7 +60,7 @@ private:
     enum class connection_state { disconnected, connected } state;
 
     void on_resolve(const boost::system::error_code &ec, tcp::resolver::iterator it);
-    void on_connect(const boost::system::error_code &ec);
+    void on_connect(const boost::system::error_code &ec, tcp::resolver::iterator);
     void on_tls_handshake(const boost::system::error_code &ec);
     void on_websocket_handshake(const boost::system::error_code &ec);
     void on_read(const boost::system::error_code &ec, size_t transferred);

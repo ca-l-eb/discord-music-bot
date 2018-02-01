@@ -2,7 +2,6 @@
 #define CMD_DISCORD_VOICE_STATE_LISTENER_H
 
 #include <boost/asio.hpp>
-#include <boost/process.hpp>
 #include <deque>
 #include <memory>
 
@@ -34,7 +33,7 @@ struct voice_gateway_entry {
     enum class state { disconnected, connected, playing, paused } p_state;
 
     std::deque<std::string> music_queue;
-    std::unique_ptr<discord::voice_gateway> gateway;
+    std::shared_ptr<discord::voice_gateway> gateway;
     std::unique_ptr<music_process> process;
 };
 
@@ -42,7 +41,7 @@ class voice_state_listener : public event_listener
 {
 public:
     voice_state_listener(boost::asio::io_context &ctx, discord::gateway &gateway,
-                         discord::gateway_store &store);
+                         discord::gateway_store &store, ssl::context &tls);
     ~voice_state_listener();
     void handle(discord::gateway &gateway, gateway_op, const nlohmann::json &json,
                 const std::string &type) override;
@@ -51,9 +50,10 @@ private:
     boost::asio::io_context &ctx;
     discord::gateway &gateway;
     discord::gateway_store &store;
+    ssl::context &tls;
 
     // guild_id to voice_gateway_entry (1 voice connection per guild)
-    std::map<uint64_t, voice_gateway_entry> voice_gateways;
+    std::map<uint64_t, std::shared_ptr<voice_gateway_entry>> voice_gateways;
 
     void voice_state_update(const nlohmann::json &data);
     void voice_server_update(const nlohmann::json &data);
