@@ -39,12 +39,13 @@ struct voice_gateway_entry {
     std::unique_ptr<music_process> process;
 };
 
-class voice_state_listener : public event_listener
+class voice_state_listener : public event_listener,
+                             public std::enable_shared_from_this<voice_state_listener>
 {
 public:
     voice_state_listener(boost::asio::io_context &ctx, discord::gateway &gateway,
                          discord::gateway_store &store, ssl::context &tls);
-    ~voice_state_listener();
+    ~voice_state_listener() = default;
     void handle(discord::gateway &gateway, gateway_op, const nlohmann::json &json,
                 const std::string &type) override;
 

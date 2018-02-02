@@ -25,7 +25,7 @@ class voice_gateway : public std::enable_shared_from_this<voice_gateway>
 public:
     voice_gateway(boost::asio::io_context &ctx, ssl::context &tls,
                   std::shared_ptr<discord::voice_gateway_entry> e, uint64_t user_id);
-    ~voice_gateway();
+    ~voice_gateway() = default;
 
     void heartbeat();
     void send(const std::string &s, transfer_cb c);
@@ -35,7 +35,6 @@ public:
 
 private:
     boost::asio::io_context &ctx;
-    ssl::context &tls;
     tcp::resolver tcp_resolver;
     secure_websocket websock;
 

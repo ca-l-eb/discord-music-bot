@@ -17,7 +17,6 @@ static void write_rtp_header(unsigned char *buffer, uint16_t seq_num, uint32_t t
 discord::voice_gateway::voice_gateway(boost::asio::io_context &ctx, ssl::context &tls,
                                       std::shared_ptr<voice_gateway_entry> e, uint64_t user_id)
     : ctx{ctx}
-    , tls{tls}
     , tcp_resolver{ctx}
     , websock{ctx, tls}
     , entry{e}
@@ -34,21 +33,21 @@ discord::voice_gateway::voice_gateway(boost::asio::io_context &ctx, ssl::context
     , state{connection_state::disconnected}
     , is_speaking{false}
 {
-    std::cout << "[voice] connecting to gateway " << entry->endpoint << " user_id[" << user_id
-              << "] session_id[" << entry->session_id << "] token[" << entry->token << "]\n";
+    std::cout << "[voice] connecting to gateway " << entry->endpoint << " session_id["
+              << entry->session_id << "] token[" << entry->token << "]\n";
 
     udp_socket.open(udp::v4());
     std::cout << "[voice] created udp socket\n";
 }
 
-discord::voice_gateway::~voice_gateway()
-{
-    std::cout << "[voice] gateway destructor\n";
-}
-
 void discord::voice_gateway::connect(error_cb c)
 {
     voice_connect_callback = c;
+
+    // entry->endpoint contains both hostname and (bogus) port, only care about hostname
+    auto parsed = resource_parser::parse(entry->endpoint);
+    entry->endpoint = std::move(parsed.host);
+
     tcp::resolver::query query{entry->endpoint, "443"};
     tcp_resolver.async_resolve(
         query, [self = shared_from_this()](auto &ec, auto it) { self->on_resolve(ec, it); });
@@ -134,7 +133,6 @@ void discord::voice_gateway::on_read(const boost::system::error_code &ec, size_t
     if (ec) {
         // TODO: if close code, convert to gate ay error code
         std::cerr << "[voice] error reading message: " << ec.message() << "\n";
-        boost::asio::post(ctx, [&]() { voice_connect_callback(ec); });
     } else {
         auto data = boost::beast::buffers_to_string(multi_buffer.data());
         handle_event(data);
@@ -218,10 +216,10 @@ void discord::voice_gateway::extract_ready_info(nlohmann::json &data)
 
     // Prepare buffer for ip discovery
     std::memset(buffer.data(), 0, 70);
-    buffer[0] = (this->ssrc & 0xFF000000) >> 24;
-    buffer[1] = (this->ssrc & 0x00FF0000) >> 16;
-    buffer[2] = (this->ssrc & 0x0000FF00) >> 8;
-    buffer[3] = (this->ssrc & 0x000000FF);
+    buffer[0] = (this->ssrc >> 24) & 0xFF;
+    buffer[1] = (this->ssrc >> 16) & 0xFF;
+    buffer[2] = (this->ssrc >> 8) & 0xFF;
+    buffer[3] = (this->ssrc >> 0) & 0xFF;
 
     std::string host;
     // Parse the endpoint url, extracting only the host
@@ -393,10 +391,13 @@ static void print_rtp_send_info(const boost::system::error_code &ec, size_t tran
 
 void discord::voice_gateway::send_audio(audio_frame frame)
 {
+    auto size = frame.opus_encoded_data.size();
+    auto encrypted_len = size + 12 + crypto_secretbox_MACBYTES;
+
     // Make sure we have enough room to store the encoded audio, 12 bytes for RTP header,
     // crypto_secretbo_MACBYTES (for MAC) in buffer
-    if (frame.opus_encoded_data.size() + 12 + crypto_secretbox_MACBYTES > buffer.size())
-        buffer.resize(frame.opus_encoded_data.size() + 12 + crypto_secretbox_MACBYTES);
+    if (encrypted_len > buffer.size())
+        buffer.resize(size + 12 + crypto_secretbox_MACBYTES);
 
     uint8_t *buf = buffer.data();
     auto write_audio = &buf[12];
@@ -412,16 +413,12 @@ void discord::voice_gateway::send_audio(audio_frame frame)
     timestamp += frame.frame_count;
 
     auto error = discord::crypto::xsalsa20_poly1305_encrypt(
-        frame.opus_encoded_data.data(), write_audio, frame.opus_encoded_data.size(),
-        secret_key.data(), nonce);
+        frame.opus_encoded_data.data(), write_audio, size, secret_key.data(), nonce);
 
     if (error) {
         std::cerr << "[voice] error encrypting data\n";
         return;  // There was a problem encrypting the data
     }
-
-    // Make sure we also count the RTP header and the MAC from encrypting
-    int encrypted_len = frame.opus_encoded_data.size() + 12 + crypto_secretbox_MACBYTES;
 
     udp_socket.async_send_to(boost::asio::buffer(buf, encrypted_len), send_endpoint,
                              print_rtp_send_info);

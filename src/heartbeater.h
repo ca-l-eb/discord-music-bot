@@ -69,7 +69,7 @@ void discord::heartbeater::start_heartbeat_timer(Beatable &b)
 template<typename Beatable>
 void discord::heartbeater::on_timer_fire(const boost::system::error_code &e, Beatable &b)
 {
-    if (e || heartbeat_interval < 0) {
+    if (e || heartbeat_interval <= 0) {
         // Timer was cancelled, dont fire the heartbeat
     } else {
         if (acked) {

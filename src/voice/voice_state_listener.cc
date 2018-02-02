@@ -41,8 +41,6 @@ discord::voice_state_listener::voice_state_listener(boost::asio::io_context &ctx
 {
 }
 
-discord::voice_state_listener::~voice_state_listener() {}
-
 void discord::voice_state_listener::handle(discord::gateway &, gateway_op,
                                            const nlohmann::json &data, const std::string &type)
 {
@@ -93,9 +91,10 @@ void discord::voice_state_listener::voice_server_update(const nlohmann::json &da
     entry->token = std::move(vsu.token);
     entry->endpoint = std::move(vsu.endpoint);
 
-    auto gateway_connect_cb = [&](const boost::system::error_code &e) {
-        if (e) {
-            std::cerr << "[voice state] voice gateway connection error: " << e.message() << "\n";
+    auto gateway_connect_cb = [ self = shared_from_this(), &entry ](auto &ec)
+    {
+        if (ec) {
+            std::cerr << "[voice state] voice gateway connection error: " << ec.message() << "\n";
         } else {
             std::cout << "[voice state] connected to voice gateway. Ready to send audio\n";
             entry->p_state = voice_gateway_entry::state::connected;
@@ -138,7 +137,6 @@ void discord::voice_state_listener::check_command(const discord::message &m)
     auto guild_id = store.lookup_channel(m.channel_id);
     auto it = voice_gateways.find(guild_id);
 
-    // TODO: consider making this a lookup table setup in constructor
     if (command == "join") {
         do_join(m, params);
     } else if (it != voice_gateways.end()) {
@@ -165,7 +163,9 @@ void discord::voice_state_listener::do_join(const discord::message &m, const std
         return;
 
     auto it = voice_gateways.find(guild->id);
-    bool connected = it == voice_gateways.end();
+    bool connected = it != voice_gateways.end();
+
+    std::cout << "[voice state] connected: " << connected << "\n";
 
     // Look through the guild's channels for channel s, if it exists, join, else fail
     // silently
@@ -173,7 +173,7 @@ void discord::voice_state_listener::do_join(const discord::message &m, const std
         if (channel.type == discord::channel::channel_type::guild_voice && channel.name == s) {
             // Found a matching voice channel name! Join it if it is different than the currently
             // connected channel (if any)
-            if (!connected || it->second->channel_id != channel.id) {
+            if (!connected || (it->second && it->second->channel_id != channel.id)) {
                 join_voice_server(guild->id, channel.id);
                 return;
             }
@@ -322,9 +322,10 @@ void discord::voice_state_listener::send_audio(voice_gateway_entry &entry)
         // Play the frame
         entry.gateway->play(frame);
 
-        auto timer_done_cb = [&](auto &ec) {
+        auto timer_done_cb = [ self = shared_from_this(), &entry ](auto &ec)
+        {
             if (!ec && entry.p_state == voice_gateway_entry::state::playing) {
-                send_audio(entry);
+                self->send_audio(entry);
             }
         };
         // Enqueue wait for the frame to send

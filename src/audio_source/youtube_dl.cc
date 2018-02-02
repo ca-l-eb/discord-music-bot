@@ -88,9 +88,11 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
             return;
         }
 
-        // Close the pipe, allow the child to terminate
-        pipe.close();
-        child.wait();
+        try {
+            // Close the pipe, allow the child to terminate
+            pipe.close();
+            child.wait();
+        } catch (...) {}
 
         if (!notified) {
             notified = true;

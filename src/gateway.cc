@@ -132,12 +132,13 @@ void discord::gateway::identify()
           {"compress", compress},
           {"large_threshold", large_threshold}}}};
 
-    auto callback = [&](const boost::system::error_code &e, size_t) {
-        if (e) {
-            std::cerr << "[gateway] identify send error: " << e.message() << "\n";
+    auto callback = [self = shared_from_this()](auto &ec, size_t)
+    {
+        if (ec) {
+            std::cerr << "[gateway] identify send error: " << ec.message() << "\n";
         } else {
             std::cout << "[gateway] sucessfully sent identify payload... beginning event loop\n";
-            event_loop();
+            self->event_loop();
         }
     };
     send(identify_payload.dump(), callback);
