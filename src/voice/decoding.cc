@@ -57,7 +57,14 @@ avio_info::~avio_info()
     av_free(avio_context);
 }
 
-audio_decoder::audio_decoder() : stream_index{-1}, do_read{true}, do_feed{true}
+audio_decoder::audio_decoder()
+    : format_context{nullptr}
+    , decoder_context{nullptr}
+    , decoder{nullptr}
+    , frame{nullptr}
+    , stream_index{-1}
+    , do_read{true}
+    , do_feed{true}
 {
     frame = av_frame_alloc();
     if (!frame)
@@ -123,10 +130,14 @@ void audio_decoder::open_decoder()
 audio_decoder::~audio_decoder()
 {
     av_frame_free(&frame);
-    avcodec_close(decoder_context);
-    avcodec_free_context(&decoder_context);
-    avformat_close_input(&format_context);
-    avformat_free_context(format_context);
+    if (decoder_context) {
+        avcodec_close(decoder_context);
+        avcodec_free_context(&decoder_context);
+    }
+    if (format_context) {
+        avformat_close_input(&format_context);
+        avformat_free_context(format_context);
+    }
 }
 
 int audio_decoder::read()

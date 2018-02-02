@@ -11,12 +11,14 @@
 #include "voice/decoding.h"
 #include "voice/opus_encoder.h"
 
-class youtube_dl_source : public audio_source
+class youtube_dl_source : public audio_source,
+                          public std::enable_shared_from_this<youtube_dl_source>
 {
 public:
     youtube_dl_source(boost::asio::io_context &ctx, discord::opus_encoder &encoder,
                       const std::string &url, error_cb c);
     virtual audio_frame next();
+    virtual void prepare();
 
 private:
     boost::asio::io_context &ctx;
@@ -33,6 +35,7 @@ private:
     std::unique_ptr<audio_resampler> resampler;
 
     error_cb callback;
+    const std::string &url;
     bool notified;
 
     enum class decoder_state {

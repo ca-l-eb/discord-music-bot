@@ -20,7 +20,7 @@ struct music_process {
     boost::asio::io_context &ctx;
     boost::asio::deadline_timer timer;
     discord::opus_encoder encoder{2, 48000};
-    std::unique_ptr<audio_source> source;
+    std::shared_ptr<audio_source> source;
 
     music_process(boost::asio::io_context &ctx) : ctx{ctx}, timer{ctx} {}
 };

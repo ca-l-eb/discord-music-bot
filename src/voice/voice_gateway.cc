@@ -430,16 +430,16 @@ static void write_rtp_header(unsigned char *buffer, uint16_t seq_num, uint32_t t
     buffer[0] = 0x80;
     buffer[1] = 0x78;
 
-    buffer[2] = (seq_num & 0xFF00) >> 8;
-    buffer[3] = (seq_num & 0x00FF);
+    buffer[2] = (seq_num >> 8) & 0xFF;
+    buffer[3] = (seq_num >> 0) & 0xFF;
 
-    buffer[4] = (timestamp & 0xFF000000) >> 24;
-    buffer[5] = (timestamp & 0x00FF0000) >> 16;
-    buffer[6] = (timestamp & 0x0000FF00) >> 8;
-    buffer[7] = (timestamp & 0x000000FF);
+    buffer[4] = (timestamp >> 24) & 0xFF;
+    buffer[5] = (timestamp >> 16) & 0xFF;
+    buffer[6] = (timestamp >> 8) & 0xFF;
+    buffer[7] = (timestamp >> 0) & 0xFF;
 
-    buffer[8] = (ssrc & 0xFF000000) >> 24;
-    buffer[9] = (ssrc & 0x00FF0000) >> 16;
-    buffer[10] = (ssrc & 0x0000FF00) >> 8;
-    buffer[11] = (ssrc & 0x000000FF);
+    buffer[8] = (ssrc >> 24) & 0xFF;
+    buffer[9] = (ssrc >> 16) & 0xFF;
+    buffer[10] = (ssrc >> 8) & 0xFF;
+    buffer[11] = (ssrc >> 0) & 0xFF;
 }

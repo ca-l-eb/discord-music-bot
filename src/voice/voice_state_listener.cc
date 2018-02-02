@@ -300,7 +300,8 @@ void discord::voice_state_listener::next_audio_source(voice_gateway_entry &entry
 
     // TODO: determine the best source for this input... for now it is only youtube_dl_source
     entry.process->source =
-        std::make_unique<youtube_dl_source>(ctx, entry.process->encoder, next, callback);
+        std::make_shared<youtube_dl_source>(ctx, entry.process->encoder, next, callback);
+    entry.process->source->prepare();
 }
 
 void discord::voice_state_listener::send_audio(voice_gateway_entry &entry)

@@ -7,9 +7,8 @@
 
 youtube_dl_source::youtube_dl_source(boost::asio::io_context &ctx, discord::opus_encoder &encoder,
                                      const std::string &url, error_cb c)
-    : ctx{ctx}, encoder{encoder}, pipe{ctx}, callback{c}
+    : ctx{ctx}, encoder{encoder}, pipe{ctx}, callback{c}, url{url}
 {
-    make_process(url);
 }
 
 audio_frame youtube_dl_source::next()
@@ -36,6 +35,11 @@ audio_frame youtube_dl_source::next()
         audio_file_data.clear();
     }
     return frame;
+}
+
+void youtube_dl_source::prepare()
+{
+    make_process(url);
 }
 
 void youtube_dl_source::make_process(const std::string &url)
@@ -74,7 +78,12 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
     }
 
     if (!e) {
-        auto pipe_read_cb = [&](auto &ec, size_t transferred) { read_from_pipe(ec, transferred); };
+        auto pipe_read_cb = [self = weak_from_this()](auto &ec, size_t transferred)
+        {
+            // Only continue if still alive
+            if (!self.expired())
+                self.lock()->read_from_pipe(ec, transferred);
+        };
 
         // Read from the pipe and fill up the audio_file_data vector
         boost::asio::async_read(pipe, boost::asio::buffer(buffer), pipe_read_cb);
@@ -88,12 +97,17 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
             return;
         }
 
-        try {
-            // Close the pipe, allow the child to terminate
-            pipe.close();
-            child.wait();
-        } catch (...) {
-        }
+        boost::system::error_code be;
+        std::error_code se;
+
+        // Close the pipe, allow the child to terminate
+        pipe.close(be);
+        child.wait(se);
+
+        if (be)
+            std::cerr << "[youtube-dl source] error closing pipe: " << be.message() << "\n";
+        if (se)
+            std::cerr << "[youtube-dl source] error waiting for process: " << se.message() << "\n";
 
         if (!notified) {
             notified = true;
