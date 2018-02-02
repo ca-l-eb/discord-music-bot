@@ -1,7 +1,7 @@
 #ifndef CMD_DISCORD_ECHO_LISTENER_H
 #define CMD_DISCORD_ECHO_LISTENER_H
 
-#include <events/event_listener.h>
+#include "events/event_listener.h"
 
 namespace discord
 {

@@ -1,17 +1,20 @@
 #ifndef CMD_DISCORD_VOICE_GATEWAY_H
 #define CMD_DISCORD_VOICE_GATEWAY_H
 
-#include <boost/asio.hpp>
-#include <boost/beast.hpp>
+#include <boost/asio/deadline_timer.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/beast/core/multi_buffer.hpp>
+#include <boost/beast/websocket.hpp>
 #include <cstdint>
 #include <iostream>
 #include <memory>
 #include <vector>
 
-#include <aliases.h>
-#include <audio_source/source.h>
-#include <callbacks.h>
-#include <heartbeater.h>
+#include "aliases.h"
+#include "audio_source/source.h"
+#include "callbacks.h"
+#include "heartbeater.h"
 
 namespace discord
 {

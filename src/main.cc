@@ -4,11 +4,11 @@
 #include <iostream>
 #include <thread>
 
-#include <aliases.h>
-#include <events/echo_listener.h>
-#include <events/hello_responder.h>
-#include <gateway.h>
-#include <voice/decoding.h>
+#include "aliases.h"
+#include "events/echo_listener.h"
+#include "events/hello_responder.h"
+#include "gateway.h"
+#include "voice/decoding.h"
 
 int main(int argc, char *argv[])
 {

@@ -2,9 +2,9 @@
 #include <iostream>
 #include <regex>
 
-#include <audio_source/youtube_dl.h>
-#include <net/resource_parser.h>
-#include <voice/voice_state_listener.h>
+#include "audio_source/youtube_dl.h"
+#include "net/resource_parser.h"
+#include "voice/voice_state_listener.h"
 
 static discord::guild *get_guild_from_channel(uint64_t channel_id, discord::gateway_store &store)
 {

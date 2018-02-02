@@ -1,6 +1,6 @@
 #include <stdexcept>
 
-#include <voice/opus_encoder.h>
+#include "voice/opus_encoder.h"
 
 discord::opus_encoder::opus_encoder(int channels, int sample_rate)
 {

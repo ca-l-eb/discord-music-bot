@@ -1,5 +1,6 @@
-#include <gateway_store.h>
 #include <iostream>
+
+#include "gateway_store.h"
 
 void discord::gateway_store::guild_create(const nlohmann::json &json)
 {

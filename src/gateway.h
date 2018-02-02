@@ -3,22 +3,24 @@
 
 #include <condition_variable>
 #include <iostream>
-#include <json.hpp>
 #include <memory>
 #include <mutex>
 #include <thread>
 
-#include <boost/asio.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ssl.hpp>
-#include <boost/beast.hpp>
+#include <boost/beast/core/multi_buffer.hpp>
+#include <boost/beast/websocket.hpp>
 
-#include <aliases.h>
-#include <callbacks.h>
-#include <discord.h>
-#include <events/event_listener.h>
-#include <gateway_store.h>
-#include <heartbeater.h>
-#include <voice/voice_gateway.h>
+#include "aliases.h"
+#include "callbacks.h"
+#include "discord.h"
+#include "events/event_listener.h"
+#include "gateway_store.h"
+#include "heartbeater.h"
+#include "json.hpp"
+#include "voice/voice_gateway.h"
 
 namespace discord
 {

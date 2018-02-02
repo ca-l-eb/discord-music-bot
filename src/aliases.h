@@ -1,9 +1,10 @@
 #ifndef DISCORD_ALIASES_H
 #define DISCORD_ALIASES_H
 
-#include <boost/asio.hpp>
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/ip/udp.hpp>
 #include <boost/asio/ssl.hpp>
-#include <boost/beast.hpp>
+#include <boost/beast/websocket.hpp>
 #include <boost/beast/websocket/ssl.hpp>
 
 namespace ssl = boost::asio::ssl;

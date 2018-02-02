@@ -1,9 +1,10 @@
 #ifndef CMD_DISCORD_H
 #define CMD_DISCORD_H
 
-#include <json.hpp>
 #include <set>
 #include <string>
+
+#include "json.hpp"
 
 namespace discord
 {

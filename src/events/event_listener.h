@@ -5,9 +5,9 @@
 #include <memory>
 #include <thread>
 
-#include <api.h>
-#include <discord.h>
-#include <json.hpp>
+#include "api.h"
+#include "discord.h"
+#include "json.hpp"
 
 namespace discord
 {
