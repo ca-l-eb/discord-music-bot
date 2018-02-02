@@ -4,7 +4,7 @@
 #include <set>
 #include <string>
 
-#include "json.hpp"
+#include <json.hpp>
 
 namespace discord
 {

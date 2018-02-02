@@ -1,8 +1,8 @@
 #include <iostream>
+#include <json.hpp>
 #include <thread>
 
 #include "api.h"
-#include "json.hpp"
 
 /*
 discord::api::api(const std::string &token) : token{token}

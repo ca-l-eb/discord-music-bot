@@ -1,13 +1,13 @@
 #ifndef GATEWAY_STORE_H
 #define GATEWAY_STORE_H
 
+#include <json.hpp>
 #include <map>
 #include <memory>
 #include <set>
 #include <string>
 
 #include "discord.h"
-#include "json.hpp"
 
 namespace discord
 {

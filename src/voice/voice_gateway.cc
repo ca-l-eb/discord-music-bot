@@ -1,10 +1,10 @@
 #include <boost/asio/connect.hpp>
 #include <boost/beast/core/buffers_to_string.hpp>
 #include <iostream>
+#include <json.hpp>
 
 #include "discord.h"
 #include "errors.h"
-#include "json.hpp"
 #include "net/resource_parser.h"
 #include "voice/crypto.h"
 #include "voice/opus_encoder.h"

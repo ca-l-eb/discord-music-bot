@@ -62,11 +62,11 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
     if (transferred > 0) {
         // Commit any transferred data to the audio_file_data vector
         audio_file_data.insert(audio_file_data.end(), buffer.begin(), buffer.begin() + transferred);
-        if (audio_file_data.size() > 32768 || e == boost::asio::error::eof) {
+        if (!notified && (audio_file_data.size() > 32768 || e == boost::asio::error::eof)) {
             if (state != decoder_state::ready)
                 try_stream();
 
-            if (!notified && state == decoder_state::ready) {
+            if (state == decoder_state::ready) {
                 notified = true;
                 boost::asio::post(ctx, [=]() { callback({}); });
             }
@@ -92,7 +92,8 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
             // Close the pipe, allow the child to terminate
             pipe.close();
             child.wait();
-        } catch (...) {}
+        } catch (...) {
+        }
 
         if (!notified) {
             notified = true;
