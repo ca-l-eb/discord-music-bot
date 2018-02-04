@@ -72,6 +72,8 @@ void discord::voice_gateway::on_connect(const boost::system::error_code &ec,
         throw std::runtime_error("Could not connect: " + ec.message());
     }
 
+    websock.next_layer().set_verify_mode(ssl::verify_peer);
+    websock.next_layer().set_verify_callback(ssl::rfc2818_verification(entry->endpoint));
     websock.next_layer().async_handshake(
         ssl::stream_base::client, [self = shared_from_this()](auto &ec) {
             self->on_tls_handshake(ec);
