@@ -7,7 +7,6 @@
 
 #include <json.hpp>
 
-#include "api.h"
 #include "discord.h"
 
 namespace discord

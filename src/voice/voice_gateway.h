@@ -42,7 +42,6 @@ private:
     boost::beast::multi_buffer multi_buffer;
 
     udp::socket udp_socket;
-    udp::endpoint send_endpoint, receive_endpoint;
     udp::resolver udp_resolver;
     boost::asio::deadline_timer timer;
 
@@ -59,7 +58,6 @@ private:
 
     enum class connection_state { disconnected, connected } state;
 
-    int retries;
     bool is_speaking;
 
     error_cb voice_connect_callback;
@@ -74,7 +72,7 @@ private:
     void extract_ready_info(nlohmann::json &data);
     void extract_session_info(nlohmann::json &data);
     void ip_discovery();
-    void send_ip_discovery_datagram();
+    void send_ip_discovery_datagram(int retries);
     void notify_heartbeater_hello(nlohmann::json &data);
     void select(uint16_t local_udp_port);
 

@@ -1,6 +1,7 @@
 #ifndef CMD_DISCORD_HELLO_RESPONDER_H
 #define CMD_DISCORD_HELLO_RESPONDER_H
 
+#include "api.h"
 #include "events/event_listener.h"
 
 namespace discord

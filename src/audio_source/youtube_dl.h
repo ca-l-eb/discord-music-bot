@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "audio_source/source.h"
+#include "callbacks.h"
 #include "voice/decoding.h"
 #include "voice/opus_encoder.h"
 

@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <iostream>
 #include <regex>
+#include <set>
 
 #include "audio_source/youtube_dl.h"
 #include "net/resource_parser.h"
@@ -286,7 +287,7 @@ void discord::voice_state_listener::next_audio_source(voice_gateway_entry &entry
     }
 
     // Get the next song from the queue
-    std::string next = entry.music_queue.front();
+    std::string next = std::move(entry.music_queue.front());
     entry.music_queue.pop_front();
 
     auto callback = [&](auto &ec) {
@@ -298,10 +299,18 @@ void discord::voice_state_listener::next_audio_source(voice_gateway_entry &entry
         send_audio(entry);
     };
 
-    // TODO: determine the best source for this input... for now it is only youtube_dl_source
-    entry.process->source =
-        std::make_shared<youtube_dl_source>(ctx, entry.process->encoder, next, callback);
-    entry.process->source->prepare();
+    auto parsed = resource_parser::parse(next);
+    if (parsed.host.empty()) {
+        std::cerr << "[voice state] invalid audio source\n";
+        return;
+    }
+    static std::set<std::string> valid_youtube_dl_sources{"youtube.com", "youtu.be",
+                                                          "www.youtube.com"};
+    if (valid_youtube_dl_sources.count(parsed.host)) {
+        entry.process->source =
+            std::make_shared<youtube_dl_source>(ctx, entry.process->encoder, next, callback);
+        entry.process->source->prepare();
+    }
 }
 
 void discord::voice_state_listener::send_audio(voice_gateway_entry &entry)

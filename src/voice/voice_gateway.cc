@@ -218,25 +218,25 @@ void discord::voice_gateway::extract_ready_info(nlohmann::json &data)
 
     // Prepare buffer for ip discovery
     std::memset(buffer.data(), 0, 70);
-    buffer[0] = (this->ssrc >> 24) & 0xFF;
-    buffer[1] = (this->ssrc >> 16) & 0xFF;
-    buffer[2] = (this->ssrc >> 8) & 0xFF;
-    buffer[3] = (this->ssrc >> 0) & 0xFF;
+    buffer[0] = (ssrc >> 24) & 0xFF;
+    buffer[1] = (ssrc >> 16) & 0xFF;
+    buffer[2] = (ssrc >> 8) & 0xFF;
+    buffer[3] = (ssrc >> 0) & 0xFF;
 
-    std::string host;
     // Parse the endpoint url, extracting only the host
-    auto parsed_results = resource_parser::parse(entry->endpoint);
-    host = parsed_results.host;
-    udp::resolver::query query{udp::v4(), host, std::to_string(udp_port)};
-    udp_resolver.async_resolve(
-        query, [&](const boost::system::error_code &e, udp::resolver::iterator iterator) {
-            if (e) {
-                boost::asio::post(ctx, [&]() { voice_connect_callback(e); });
-            } else {
-                send_endpoint = *iterator;
-                ip_discovery();
-            }
-        });
+    auto parsed = resource_parser::parse(entry->endpoint);
+    udp::resolver::query query{udp::v4(), parsed.host, std::to_string(udp_port)};
+    udp_resolver.async_resolve(query, [self = shared_from_this()](auto &ec, auto it) {
+        if (ec) {
+            boost::asio::post(self->ctx, [&]() { self->voice_connect_callback(ec); });
+        } else {
+            // Use the first endpoint (*it) for sending and receiving
+            self->udp_socket.connect(*it);
+            std::cout << "[voice] udp local: " << self->udp_socket.local_endpoint()
+                      << " remote: " << self->udp_socket.remote_endpoint() << "\n";
+            self->ip_discovery();
+        }
+    });
 }
 
 void discord::voice_gateway::extract_session_info(nlohmann::json &data)
@@ -261,60 +261,59 @@ void discord::voice_gateway::ip_discovery()
     // Receive 70 byte payload containing external ip and udp portno
 
     // Let's try retry 5 times if we fail to receive response
-    retries = 5;
-
-    send_ip_discovery_datagram();
-    auto udp_recv_cb = [&](auto &ec, auto transferred) {
+    send_ip_discovery_datagram(5);
+    auto udp_recv_cb = [self = shared_from_this()](auto &ec, auto transferred)
+    {
         if (ec) {
-            boost::asio::post(ctx, [&]() { voice_connect_callback(ec); });
+            boost::asio::post(self->ctx, [self, ec]() { self->voice_connect_callback(ec); });
         } else if (transferred >= 70) {
             // We got our response, cancel the next send
-            timer.cancel();
+            self->timer.cancel();
 
             // First 4 bytes of buffer should be SSRC, next is beginning
             // of this udp socket's external IP
-            external_ip = std::string((char *) &buffer[4]);
+            self->external_ip = std::string((char *) &self->buffer[4]);
 
             // Extract the port the udp socket is on (little-endian)
-            uint16_t local_udp_port = (buffer[69] << 8) | buffer[68];
+            uint16_t local_udp_port = (self->buffer[69] << 8) | self->buffer[68];
 
-            std::cout << "[voice] udp socket bound at " << external_ip << ":" << local_udp_port
-                      << "\n";
+            std::cout << "[voice] udp socket bound at " << self->external_ip << ":"
+                      << local_udp_port << "\n";
 
-            select(local_udp_port);
+            self->select(local_udp_port);
         }
     };
 
     // udp_recv_cb isn't called until the socket is closed, or the data is received
-    udp_socket.async_receive_from(boost::asio::buffer(buffer, buffer.size()), receive_endpoint,
-                                  udp_recv_cb);
+    udp_socket.async_receive(boost::asio::buffer(buffer, buffer.size()), udp_recv_cb);
 }
 
-void discord::voice_gateway::send_ip_discovery_datagram()
+void discord::voice_gateway::send_ip_discovery_datagram(int retries)
 {
-    auto udp_sent_cb = [&](auto &ec, auto) {
+    auto udp_sent_cb = [ self = shared_from_this(), retries ](auto &ec, auto)
+    {
         if (ec && ec != boost::asio::error::operation_aborted) {
             std::cerr << "[voice] could not send udp packet to voice server: " << ec.message()
                       << "\n";
         }
         if (retries == 0) {
             // Alert the caller that we failed
-            boost::asio::post(ctx,
-                              [&]() { voice_connect_callback(voice_errc::ip_discovery_failed); });
-            // close the socket to complete the async_receive_from
-            udp_socket.close();
+            boost::asio::post(self->ctx, [&]() {
+                self->voice_connect_callback(voice_errc::ip_discovery_failed);
+            });
+            // close the socket to complete the async_receive
+            self->udp_socket.close();
             return;
         }
-        retries--;
-        auto timer_cb = [&](auto &e) {
+        auto timer_cb = [=](auto &e) {
             if (!e)
-                send_ip_discovery_datagram();
+                self->send_ip_discovery_datagram(retries - 1);
         };
         // Next time expires in 200 ms
-        timer.expires_from_now(boost::posix_time::milliseconds(200));
-        timer.async_wait(timer_cb);
+        self->timer.expires_from_now(boost::posix_time::milliseconds(200));
+        self->timer.async_wait(timer_cb);
     };
-    udp_socket.async_send_to(boost::asio::buffer(buffer.data(), 70), send_endpoint, udp_sent_cb);
+    udp_socket.async_send(boost::asio::buffer(buffer.data(), 70), udp_sent_cb);
 }
 
 void discord::voice_gateway::select(uint16_t local_udp_port)
@@ -338,6 +337,8 @@ void discord::voice_gateway::notify_heartbeater_hello(nlohmann::json &data)
         val = (val / 4) * 3;
         data["heartbeat_interval"] = val;
         beater.on_hello(data, *this);
+    } else {
+        std::cerr << "[voice] no heartbeat_interval in hello payload\n";
     }
 }
 
@@ -399,7 +400,7 @@ void discord::voice_gateway::send_audio(audio_frame frame)
     // Make sure we have enough room to store the encoded audio, 12 bytes for RTP header,
     // crypto_secretbo_MACBYTES (for MAC) in buffer
     if (encrypted_len > buffer.size())
-        buffer.resize(size + 12 + crypto_secretbox_MACBYTES);
+        buffer.resize(encrypted_len);
 
     uint8_t *buf = buffer.data();
     auto write_audio = &buf[12];
@@ -422,8 +423,7 @@ void discord::voice_gateway::send_audio(audio_frame frame)
         return;  // There was a problem encrypting the data
     }
 
-    udp_socket.async_send_to(boost::asio::buffer(buf, encrypted_len), send_endpoint,
-                             print_rtp_send_info);
+    udp_socket.async_send(boost::asio::buffer(buf, encrypted_len), print_rtp_send_info);
 }
 
 static void write_rtp_header(unsigned char *buffer, uint16_t seq_num, uint32_t timestamp,
