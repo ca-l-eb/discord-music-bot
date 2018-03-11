@@ -36,3 +36,4 @@ Finally `./discord <bot-token>` will run the bot.
 - [libsodium](https://download.libsodium.org/doc/)
 - [opus](http://opus-codec.org/)
 - [youtube-dl](https://github.com/rg3/youtube-dl)
+- [nlohmann-json](https://github.com/nlohmann/json)

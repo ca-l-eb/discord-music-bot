@@ -34,3 +34,4 @@ OpenSSL https://www.openssl.org/source/license.txt
 libsodium https://github.com/jedisct1/libsodium/blob/master/LICENSE
 opus http://opus-codec.org/license/
 youtube-dl https://github.com/rg3/youtube-dl/blob/master/LICENSE
+nlohmann-json https://github.com/nlohmann/json/blob/develop/LICENSE.MIT
