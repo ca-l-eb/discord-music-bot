@@ -82,6 +82,6 @@ private:
     void on_websocket_handshake(const boost::system::error_code &ec);
     void on_read(const boost::system::error_code &ec, size_t transferred);
 };
-}
+}  // namespace discord
 
 #endif

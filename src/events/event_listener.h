@@ -18,6 +18,6 @@ struct event_listener {
     virtual void handle(discord::gateway &gateway, gateway_op, const nlohmann::json &,
                         const std::string &) = 0;
 };
-}
+}  // namespace discord
 
 #endif

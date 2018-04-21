@@ -9,6 +9,6 @@ struct echo_listener : public event_listener {
     void handle(discord::gateway &, gateway_op, const nlohmann::json &json,
                 const std::string &type) override;
 };
-}
+}  // namespace discord
 
 #endif

@@ -62,8 +62,8 @@ void discord::voice_gateway::on_resolve(const boost::system::error_code &ec,
     }
 
     boost::asio::async_connect(
-        websock.next_layer().lowest_layer(),
-        it, [self = shared_from_this()](auto &ec, auto it) { self->on_connect(ec, it); });
+        websock.next_layer().lowest_layer(), it,
+        [self = shared_from_this()](auto &ec, auto it) { self->on_connect(ec, it); });
 }
 
 void discord::voice_gateway::on_connect(const boost::system::error_code &ec,
@@ -76,9 +76,8 @@ void discord::voice_gateway::on_connect(const boost::system::error_code &ec,
     websock.next_layer().set_verify_mode(ssl::verify_peer);
     websock.next_layer().set_verify_callback(ssl::rfc2818_verification(entry->endpoint));
     websock.next_layer().async_handshake(
-        ssl::stream_base::client, [self = shared_from_this()](auto &ec) {
-            self->on_tls_handshake(ec);
-        });
+        ssl::stream_base::client,
+        [self = shared_from_this()](auto &ec) { self->on_tls_handshake(ec); });
 }
 
 void discord::voice_gateway::on_tls_handshake(const boost::system::error_code &ec)
@@ -263,8 +262,7 @@ void discord::voice_gateway::ip_discovery()
 
     // Let's try retry 5 times if we fail to receive response
     send_ip_discovery_datagram(5);
-    auto udp_recv_cb = [self = shared_from_this()](auto &ec, auto transferred)
-    {
+    auto udp_recv_cb = [self = shared_from_this()](auto &ec, auto transferred) {
         if (ec) {
             boost::asio::post(self->ctx, [self, ec]() { self->voice_connect_callback(ec); });
         } else if (transferred >= 70) {
@@ -291,8 +289,7 @@ void discord::voice_gateway::ip_discovery()
 
 void discord::voice_gateway::send_ip_discovery_datagram(int retries)
 {
-    auto udp_sent_cb = [ self = shared_from_this(), retries ](auto &ec, auto)
-    {
+    auto udp_sent_cb = [self = shared_from_this(), retries](auto &ec, auto) {
         if (ec && ec != boost::asio::error::operation_aborted) {
             std::cerr << "[voice] could not send udp packet to voice server: " << ec.message()
                       << "\n";

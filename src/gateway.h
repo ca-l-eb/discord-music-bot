@@ -77,6 +77,6 @@ private:
     void event_loop();
     void handle_event(const std::string &data);
 };
-}
+}  // namespace discord
 
 #endif

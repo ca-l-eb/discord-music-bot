@@ -92,8 +92,7 @@ void discord::voice_state_listener::voice_server_update(const nlohmann::json &da
     entry->token = std::move(vsu.token);
     entry->endpoint = std::move(vsu.endpoint);
 
-    auto gateway_connect_cb = [ self = shared_from_this(), &entry ](auto &ec)
-    {
+    auto gateway_connect_cb = [self = shared_from_this(), &entry](auto &ec) {
         if (ec) {
             std::cerr << "[voice state] voice gateway connection error: " << ec.message() << "\n";
         } else {
@@ -332,8 +331,7 @@ void discord::voice_state_listener::send_audio(voice_gateway_entry &entry)
         // Play the frame
         entry.gateway->play(frame);
 
-        auto timer_done_cb = [ self = shared_from_this(), &entry ](auto &ec)
-        {
+        auto timer_done_cb = [self = shared_from_this(), &entry](auto &ec) {
             if (!ec && entry.p_state == voice_gateway_entry::state::playing) {
                 self->send_audio(entry);
             }

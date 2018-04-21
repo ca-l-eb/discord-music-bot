@@ -168,7 +168,7 @@ struct voice_server_update {
 void from_json(const nlohmann::json &json, discord::event::hello &h);
 void from_json(const nlohmann::json &json, discord::event::ready &r);
 void from_json(const nlohmann::json &json, discord::event::voice_server_update &v);
-}
-}
+}  // namespace event
+}  // namespace discord
 
 #endif

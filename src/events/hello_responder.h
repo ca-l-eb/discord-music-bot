@@ -14,6 +14,6 @@ struct hello_responder : public event_listener {
 private:
     discord::api &api;
 };
-}
+}  // namespace discord
 
 #endif

@@ -28,6 +28,6 @@ private:
     std::map<uint64_t, uint64_t> channels_to_guild;              // channel id to guild id
     std::multimap<uint64_t, uint64_t> user_to_guilds;            // user id to multiple guild ids
 };
-}
+}  // namespace discord
 
 #endif

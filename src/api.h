@@ -39,6 +39,6 @@ private:
     //    api_response check_success(http_request &request, int code, api_limit_param param);
     //    api_result check_rate_limits(http_response &response, api_limit_param param);
 };
-}
+}  // namespace discord
 
 #endif

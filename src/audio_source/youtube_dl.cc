@@ -78,8 +78,7 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
     }
 
     if (!e) {
-        auto pipe_read_cb = [self = weak_from_this()](auto &ec, size_t transferred)
-        {
+        auto pipe_read_cb = [self = weak_from_this()](auto &ec, size_t transferred) {
             // Only continue if still alive
             if (!self.expired())
                 self.lock()->read_from_pipe(ec, transferred);

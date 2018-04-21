@@ -77,6 +77,6 @@ private:
     void next_audio_source(voice_gateway_entry &entry);
     void send_audio(voice_gateway_entry &entry);
 };
-}
+}  // namespace discord
 
 #endif

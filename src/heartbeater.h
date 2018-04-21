@@ -42,7 +42,7 @@ private:
     template<typename Beatable>
     void on_timer_fire(const boost::system::error_code &e, Beatable &b);
 };
-}
+}  // namespace discord
 
 template<typename Beatable>
 void discord::heartbeater::on_hello(const nlohmann::json &data, Beatable &b)

@@ -20,6 +20,6 @@ public:
 private:
     OpusEncoder *encoder;
 };
-}
+}  // namespace discord
 
 #endif

@@ -44,8 +44,8 @@ void discord::gateway::on_resolve(const boost::system::error_code &ec, tcp::reso
     }
 
     boost::asio::async_connect(
-        websock.next_layer().next_layer(),
-        it, [self = shared_from_this()](auto &ec, auto it) { self->on_connect(ec, it); });
+        websock.next_layer().next_layer(), it,
+        [self = shared_from_this()](auto &ec, auto it) { self->on_connect(ec, it); });
 }
 
 void discord::gateway::on_connect(const boost::system::error_code &ec, tcp::resolver::iterator)
@@ -57,9 +57,8 @@ void discord::gateway::on_connect(const boost::system::error_code &ec, tcp::reso
     websock.next_layer().set_verify_mode(ssl::verify_peer);
     websock.next_layer().set_verify_callback(ssl::rfc2818_verification("gateway.discord.gg"));
     websock.next_layer().async_handshake(
-        ssl::stream_base::client, [self = shared_from_this()](auto &ec) {
-            self->on_tls_handshake(ec);
-        });
+        ssl::stream_base::client,
+        [self = shared_from_this()](auto &ec) { self->on_tls_handshake(ec); });
 }
 
 void discord::gateway::on_tls_handshake(const boost::system::error_code &ec)
@@ -68,10 +67,9 @@ void discord::gateway::on_tls_handshake(const boost::system::error_code &ec)
         throw std::runtime_error{"TLS handshake error: " + ec.message()};
     }
 
-    websock.async_handshake("gateway.discord.gg",
-                            "/?v=6&encoding=json", [self = shared_from_this()](auto &ec) {
-                                self->on_websocket_handshake(ec);
-                            });
+    websock.async_handshake(
+        "gateway.discord.gg", "/?v=6&encoding=json",
+        [self = shared_from_this()](auto &ec) { self->on_websocket_handshake(ec); });
 }
 
 void discord::gateway::on_websocket_handshake(const boost::system::error_code &ec)
@@ -128,8 +126,7 @@ void discord::gateway::identify()
           {"compress", compress},
           {"large_threshold", large_threshold}}}};
 
-    auto callback = [self = shared_from_this()](auto &ec, size_t)
-    {
+    auto callback = [self = shared_from_this()](auto &ec, size_t) {
         if (ec) {
             std::cerr << "[gateway] identify send error: " << ec.message() << "\n";
         } else {

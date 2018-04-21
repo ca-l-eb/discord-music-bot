@@ -12,6 +12,6 @@ struct parsed_url {
     std::string resource;
 };
 parsed_url parse(const std::string &url);
-}
+}  // namespace resource_parser
 
 #endif
