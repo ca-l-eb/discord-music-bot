@@ -16,17 +16,12 @@ discord::gateway::gateway(boost::asio::io_context &ctx, ssl::context &tls, const
     , token{token}
     , state{connection_state::disconnected}
 {
-    gateway_event_map.emplace("READY", [&](nlohmann::json &data) { on_ready(data); });
-    gateway_event_map.emplace("GUILD_CREATE",
-                              [&](nlohmann::json &data) { store.guild_create(data); });
-    gateway_event_map.emplace("CHANNEL_CREATE",
-                              [&](nlohmann::json &data) { store.channel_create(data); });
-    gateway_event_map.emplace("CHANNEL_UPDATE",
-                              [&](nlohmann::json &data) { store.channel_update(data); });
-    gateway_event_map.emplace("CHANNEL_DELETE",
-                              [&](nlohmann::json &data) { store.channel_delete(data); });
-    gateway_event_map.emplace("RESUME",
-                              [&](nlohmann::json &) { state = connection_state::connected; });
+    gateway_event_map.emplace("READY", [&](auto &json) { on_ready(json); });
+    gateway_event_map.emplace("GUILD_CREATE", [&](auto &json) { store.guild_create(json); });
+    gateway_event_map.emplace("CHANNEL_CREATE", [&](auto &json) { store.channel_create(json); });
+    gateway_event_map.emplace("CHANNEL_UPDATE", [&](auto &json) { store.channel_update(json); });
+    gateway_event_map.emplace("CHANNEL_DELETE", [&](auto &json) { store.channel_delete(json); });
+    gateway_event_map.emplace("RESUME", [&](auto &) { state = connection_state::connected; });
 
     // Add listener for voice events
     auto handler = std::make_shared<voice_state_listener>(ctx, *this, store, tls);
@@ -37,7 +32,7 @@ discord::gateway::gateway(boost::asio::io_context &ctx, ssl::context &tls, const
 
 void discord::gateway::run()
 {
-    tcp::resolver::query query{"gateway.discord.gg", "443"};
+    auto query = tcp::resolver::query{"gateway.discord.gg", "443"};
     resolver.async_resolve(
         query, [self = shared_from_this()](auto &ec, auto it) { self->on_resolve(ec, it); });
 }
@@ -111,20 +106,20 @@ void discord::gateway::remove_listener(const std::string &event_name,
 void discord::gateway::send(const std::string &s, transfer_cb c)
 {
     // TODO: use strand + message queue + timer for delay
-    boost::system::error_code ec;
+    auto ec = boost::system::error_code{};
     auto wrote = websock.write(boost::asio::buffer(s), ec);
     c(ec, wrote);
 }
 
 void discord::gateway::heartbeat()
 {
-    nlohmann::json json{{"op", static_cast<int>(gateway_op::heartbeat)}, {"d", seq_num}};
+    auto json = nlohmann::json{{"op", static_cast<int>(gateway_op::heartbeat)}, {"d", seq_num}};
     send(json.dump(), ignore_transfer);
 }
 
 void discord::gateway::identify()
 {
-    nlohmann::json identify_payload{
+    auto identify_payload = nlohmann::json{
         {"op", static_cast<int>(gateway_op::identify)},
         {"d",
          {{"token", token},
@@ -154,11 +149,13 @@ void discord::gateway::resume()
     if (session_id.empty())
         throw std::runtime_error("Could not resume previous session: no such session");
 
+    std::cout << "[gateway] attempting to resume connection\n";
+
     // TODO: Close the previous connection and create a new websocket
 
-    nlohmann::json resume_payload{
-        {"op", static_cast<int>(gateway_op::resume)},
-        {"d", {{"token", token}, {"session_id", session_id}, {"seq", seq_num}}}};
+    auto resume_payload =
+        nlohmann::json{{"op", static_cast<int>(gateway_op::resume)},
+                       {"d", {{"token", token}, {"session_id", session_id}, {"seq", seq_num}}}};
     send(resume_payload.dump(), ignore_transfer);
 }
 
@@ -175,7 +172,8 @@ const std::string &discord::gateway::get_session_id() const
 void discord::gateway::run_public_dispatch(gateway_op op, nlohmann::json &data,
                                            const std::string &t)
 {
-    std::string events[] = {t, "ALL"};
+    using namespace std::string_literals;
+    auto events = {t, "ALL"s};
     for (auto &event : events) {
         auto range = event_name_to_handler_name.equal_range(event);
         for (auto it = range.first; it != range.second; ++it) {
@@ -239,7 +237,7 @@ void discord::gateway::handle_event(const std::string &data)
         seq_num = payload.sequence_num;
 
         if (payload.event_name == "MESSAGE_CREATE") {
-            // TODO: Ignore messages that are sent by this bot (user_id)
+            auto message = payload.data.get<discord::message>();
         }
 
         switch (payload.op) {

@@ -1,5 +1,3 @@
-#include <boost/asio/ssl.hpp>
-#include <csignal>
 #include <cstdlib>
 #include <iostream>
 #include <thread>
@@ -13,12 +11,11 @@
 int main(int argc, char *argv[])
 {
     try {
-        std::signal(SIGPIPE, SIG_IGN);
         if (argc < 2) {
             std::cerr << "Usage: " << argv[0] << " <bot token>\n";
             return EXIT_FAILURE;
         }
-        std::string token{argv[1]};
+        auto token = std::string{argv[1]};
         if (token.length() != 59) {
             std::cerr << "Invalid token. Token should be 59 characters long\n";
             return EXIT_FAILURE;
@@ -26,8 +23,8 @@ int main(int argc, char *argv[])
 
         av_register_all();  // Initialize libavformat
 
-        boost::asio::io_context ctx;
-        ssl::context tls{ssl::context::tls_client};
+        auto ctx = boost::asio::io_context{};
+        auto tls = ssl::context{ssl::context::tls_client};
         tls.set_default_verify_paths();
         tls.set_verify_mode(ssl::context::verify_peer);
 

@@ -1,3 +1,4 @@
+#include <array>
 #include <boost/asio/connect.hpp>
 #include <boost/beast/core/buffers_to_string.hpp>
 #include <iostream>
@@ -48,7 +49,7 @@ void discord::voice_gateway::connect(error_cb c)
     auto parsed = resource_parser::parse(entry->endpoint);
     entry->endpoint = std::move(parsed.host);
 
-    tcp::resolver::query query{entry->endpoint, "443"};
+    auto query = tcp::resolver::query{entry->endpoint, "443"};
     tcp_resolver.async_resolve(
         query, [self = shared_from_this()](auto &ec, auto it) { self->on_resolve(ec, it); });
 }
@@ -104,12 +105,12 @@ void discord::voice_gateway::on_websocket_handshake(const boost::system::error_c
 
 void discord::voice_gateway::identify()
 {
-    nlohmann::json identify{{"op", static_cast<int>(voice_op::identify)},
-                            {"d",
-                             {{"server_id", entry->guild_id},
-                              {"user_id", user_id},
-                              {"session_id", entry->session_id},
-                              {"token", entry->token}}}};
+    auto identify = nlohmann::json{{"op", static_cast<int>(voice_op::identify)},
+                                   {"d",
+                                    {{"server_id", entry->guild_id},
+                                     {"user_id", user_id},
+                                     {"session_id", entry->session_id},
+                                     {"token", entry->token}}}};
     auto identify_sent_cb = [&](auto &ec, auto) {
         if (ec) {
             std::cout << "[voice] gateway identify error: " << ec.message() << "\n";
@@ -125,7 +126,7 @@ void discord::voice_gateway::identify()
 void discord::voice_gateway::send(const std::string &s, transfer_cb c)
 {
     // TODO: use strand + message queue + timer for delay
-    boost::system::error_code ec;
+    auto ec = boost::system::error_code{};
     auto wrote = websock.write(boost::asio::buffer(s), ec);
     c(ec, wrote);
 }
@@ -156,7 +157,7 @@ void discord::voice_gateway::handle_event(const std::string &data)
     std::cout << "\n";
     // Parse the results as a json object
     try {
-        nlohmann::json json = nlohmann::json::parse(data);
+        auto json = nlohmann::json::parse(data);
         auto payload = json.get<discord::voice_payload>();
 
         switch (payload.op) {
@@ -194,18 +195,18 @@ void discord::voice_gateway::handle_event(const std::string &data)
 void discord::voice_gateway::heartbeat()
 {
     // TODO: save the nonce (rand()) and check if it is ACKed
-    nlohmann::json json{{"op", static_cast<int>(voice_op::heartbeat)}, {"d", rand()}};
+    auto json = nlohmann::json{{"op", static_cast<int>(voice_op::heartbeat)}, {"d", rand()}};
     send(json.dump(), ignore_transfer);
 }
 
 void discord::voice_gateway::resume()
 {
     state = connection_state::disconnected;
-    nlohmann::json resumed{{"op", static_cast<int>(voice_op::resume)},
-                           {"d",
-                            {{"server_id", entry->guild_id},
-                             {"session_id", entry->session_id},
-                             {"token", entry->token}}}};
+    auto resumed = nlohmann::json{{"op", static_cast<int>(voice_op::resume)},
+                                  {"d",
+                                   {{"server_id", entry->guild_id},
+                                    {"session_id", entry->session_id},
+                                    {"token", entry->token}}}};
     send(resumed.dump(), ignore_transfer);
 }
 
@@ -225,7 +226,7 @@ void discord::voice_gateway::extract_ready_info(nlohmann::json &data)
 
     // Parse the endpoint url, extracting only the host
     auto parsed = resource_parser::parse(entry->endpoint);
-    udp::resolver::query query{udp::v4(), parsed.host, std::to_string(udp_port)};
+    auto query = udp::resolver::query{udp::v4(), parsed.host, std::to_string(udp_port)};
     udp_resolver.async_resolve(query, [self = shared_from_this()](auto &ec, auto it) {
         if (ec) {
             boost::asio::post(self->ctx, [&]() { self->voice_connect_callback(ec); });
@@ -318,7 +319,7 @@ void discord::voice_gateway::send_ip_discovery_datagram(int retries)
 
 void discord::voice_gateway::select(uint16_t local_udp_port)
 {
-    nlohmann::json select_payload{
+    auto select_payload = nlohmann::json{
         {"op", static_cast<int>(voice_op::select_proto)},
         {"d",
          {{"protocol", "udp"},
@@ -333,7 +334,7 @@ void discord::voice_gateway::notify_heartbeater_hello(nlohmann::json &data)
     // Override the heartbeat_interval with value 75% of current
     // This is a bug with Discord apparently
     if (data["heartbeat_interval"].is_number()) {
-        int val = data.at("heartbeat_interval").get<int>();
+        auto val = data.at("heartbeat_interval").get<int>();
         val = (val / 4) * 3;
         data["heartbeat_interval"] = val;
         beater.on_hello(data, *this);
@@ -345,8 +346,8 @@ void discord::voice_gateway::notify_heartbeater_hello(nlohmann::json &data)
 static void do_speak(discord::voice_gateway &vg, transfer_cb c, bool speak)
 {
     // Apparently this _doesnt_ need the ssrc
-    nlohmann::json speaking_payload{{"op", static_cast<int>(discord::voice_op::speaking)},
-                                    {"d", {{"speaking", speak}, {"delay", 0}}}};
+    auto speaking_payload = nlohmann::json{{"op", static_cast<int>(discord::voice_op::speaking)},
+                                           {"d", {{"speaking", speak}, {"delay", 0}}}};
     vg.send(speaking_payload.dump(), c);
 }
 
@@ -402,21 +403,21 @@ void discord::voice_gateway::send_audio(audio_frame frame)
     if (encrypted_len > buffer.size())
         buffer.resize(encrypted_len);
 
-    uint8_t *buf = buffer.data();
+    auto buf = buffer.data();
     auto write_audio = &buf[12];
-    uint8_t nonce[24];
+    auto nonce = std::array<uint8_t, 24>{};
 
     write_rtp_header(buf, seq_num, timestamp, ssrc);
 
     // First 12 bytes of nonce are RTP header, next 12 are 0s
-    std::memcpy(nonce, buf, 12);
+    std::memcpy(&nonce[0], buf, 12);
     std::memset(&nonce[12], 0, 12);
 
     seq_num++;
     timestamp += frame.frame_count;
 
     auto error = discord::crypto::xsalsa20_poly1305_encrypt(
-        frame.opus_encoded_data.data(), write_audio, size, secret_key.data(), nonce);
+        frame.opus_encoded_data.data(), write_audio, size, secret_key.data(), nonce.data());
 
     if (error) {
         std::cerr << "[voice] error encrypting data\n";

@@ -38,6 +38,8 @@ public:
     uint64_t get_user_id() const;
     const std::string &get_session_id() const;
 
+    using discord_event_cb = std::function<void(nlohmann::json &)>;
+
 private:
     boost::asio::io_context &ctx;
     tcp::resolver resolver;
@@ -51,7 +53,7 @@ private:
 
     // Map a handler name to a event_lister
     std::map<std::string, event_listener::ptr> handler_name_to_handler_ptr;
-    std::map<std::string, std::function<void(nlohmann::json &)>> gateway_event_map;
+    std::map<std::string, discord_event_cb> gateway_event_map;
 
     std::string token;
     std::string session_id;

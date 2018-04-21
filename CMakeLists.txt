@@ -52,6 +52,6 @@ set(HEADER_FILES
         src/voice/voice_state_listener.h
         )
 
-add_executable(discord src/main.cc ${SOURCE_FILES} ${HEADER_FILES})
-target_link_libraries(discord ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES} ${OPENSSL_LIBRARIES} ${FFMPEG_LIBRARIES} opus sodium)
-target_include_directories(discord PUBLIC ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/libs)
+add_executable(discordbot src/main.cc ${SOURCE_FILES} ${HEADER_FILES})
+target_link_libraries(discordbot ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES} ${OPENSSL_LIBRARIES} ${FFMPEG_LIBRARIES} opus sodium)
+target_include_directories(discordbot PUBLIC ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/libs)
