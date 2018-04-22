@@ -18,10 +18,9 @@ set(SOURCE_FILES
         src/callbacks.cc
         src/discord.cc
         src/errors.cc
-        src/events/echo_listener.cc
-        src/events/hello_responder.cc
         src/gateway.cc
         src/gateway_store.cc
+        src/net/connection.cc
         src/net/resource_parser.cc
         src/voice/crypto.cc
         src/voice/decoding.cc
@@ -38,12 +37,10 @@ set(HEADER_FILES
         src/callbacks.h
         src/discord.h
         src/errors.h
-        src/events/echo_listener.h
-        src/events/event_listener.h
-        src/events/hello_responder.h
         src/gateway.h
         src/gateway_store.h
         src/heartbeater.h
+        src/net/connection.h
         src/net/resource_parser.h
         src/voice/crypto.h
         src/voice/decoding.h
