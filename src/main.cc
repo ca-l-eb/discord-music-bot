@@ -3,9 +3,8 @@
 #include <thread>
 
 #include "aliases.h"
-#include "events/echo_listener.h"
-#include "events/hello_responder.h"
 #include "gateway.h"
+#include "net/connection.h"
 #include "voice/decoding.h"
 
 int main(int argc, char *argv[])
@@ -28,7 +27,9 @@ int main(int argc, char *argv[])
         tls.set_default_verify_paths();
         tls.set_verify_mode(ssl::context::verify_peer);
 
-        std::make_shared<discord::gateway>(ctx, tls, token)->run();
+        auto gateway_connection = std::make_shared<discord::connection>(ctx, tls);
+        auto gateway = discord::gateway{ctx, tls, token, *gateway_connection};
+        gateway.run();
 
         ctx.run();
     } catch (std::exception &e) {

@@ -34,27 +34,14 @@ static void update_bitrate(discord::voice_gateway_entry &entry, discord::gateway
     }
 }
 
-discord::voice_state_listener::voice_state_listener(boost::asio::io_context &ctx,
+discord::voice_state_listener::voice_state_listener(boost::asio::io_context &ctx, ssl::context &tls,
                                                     discord::gateway &gateway,
-                                                    discord::gateway_store &store,
-                                                    ssl::context &tls)
-    : ctx{ctx}, gateway{gateway}, store{store}, tls{tls}
+                                                    discord::gateway_store &store)
+    : ctx{ctx}, tls{tls}, gateway{gateway}, store{store}
 {
 }
 
-void discord::voice_state_listener::handle(discord::gateway &, gateway_op,
-                                           const nlohmann::json &data, const std::string &type)
-{
-    if (type == "VOICE_STATE_UPDATE") {
-        voice_state_update(data);
-    } else if (type == "VOICE_SERVER_UPDATE") {
-        voice_server_update(data);
-    } else if (type == "MESSAGE_CREATE") {
-        message_create(data);
-    }
-}
-
-void discord::voice_state_listener::voice_state_update(const nlohmann::json &data)
+void discord::voice_state_listener::on_voice_state_update(const nlohmann::json &data)
 {
     auto state = data.get<discord::voice_state>();
     assert(state.guild_id);
@@ -78,7 +65,7 @@ void discord::voice_state_listener::voice_state_update(const nlohmann::json &dat
         update_bitrate(entry, store);
 }
 
-void discord::voice_state_listener::voice_server_update(const nlohmann::json &data)
+void discord::voice_state_listener::on_voice_server_update(const nlohmann::json &data)
 {
     auto vsu = data.get<discord::event::voice_server_update>();
 
@@ -108,7 +95,7 @@ void discord::voice_state_listener::voice_server_update(const nlohmann::json &da
 }
 
 // Listen for guild text messages indicating to join, leave, play, pause, etc.
-void discord::voice_state_listener::message_create(const nlohmann::json &data)
+void discord::voice_state_listener::on_message_create(const nlohmann::json &data)
 {
     auto msg = data.get<discord::message>();
     if (msg.type != discord::message::message_type::default_)
@@ -164,8 +151,6 @@ void discord::voice_state_listener::do_join(const discord::message &m, const std
 
     auto it = voice_gateways.find(guild->id);
     bool connected = it != voice_gateways.end();
-
-    std::cout << "[voice state] connected: " << connected << "\n";
 
     // Look through the guild's channels for channel s, if it exists, join, else fail
     // silently

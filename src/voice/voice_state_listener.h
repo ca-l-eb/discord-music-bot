@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "audio_source/source.h"
-#include "events/event_listener.h"
 #include "gateway.h"
 #include "voice/opus_encoder.h"
 
@@ -39,28 +38,25 @@ struct voice_gateway_entry {
     std::unique_ptr<music_process> process;
 };
 
-class voice_state_listener : public event_listener,
-                             public std::enable_shared_from_this<voice_state_listener>
+class voice_state_listener : public std::enable_shared_from_this<voice_state_listener>
 {
 public:
-    voice_state_listener(boost::asio::io_context &ctx, discord::gateway &gateway,
-                         discord::gateway_store &store, ssl::context &tls);
+    voice_state_listener(boost::asio::io_context &ctx, ssl::context &tls, discord::gateway &gateway,
+                         discord::gateway_store &store);
     ~voice_state_listener() = default;
-    void handle(discord::gateway &gateway, gateway_op, const nlohmann::json &json,
-                const std::string &type) override;
+
+    void on_voice_state_update(const nlohmann::json &data);
+    void on_voice_server_update(const nlohmann::json &data);
+    void on_message_create(const nlohmann::json &data);
 
 private:
     boost::asio::io_context &ctx;
+    ssl::context &tls;
     discord::gateway &gateway;
     discord::gateway_store &store;
-    ssl::context &tls;
 
     // guild_id to voice_gateway_entry (1 voice connection per guild)
     std::map<uint64_t, std::shared_ptr<voice_gateway_entry>> voice_gateways;
-
-    void voice_state_update(const nlohmann::json &data);
-    void voice_server_update(const nlohmann::json &data);
-    void message_create(const nlohmann::json &data);
 
     void join_voice_server(uint64_t guild_id, uint64_t channel_id);
     void leave_voice_server(uint64_t guild_id);

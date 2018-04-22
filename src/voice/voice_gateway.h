@@ -15,6 +15,7 @@
 #include "audio_source/source.h"
 #include "callbacks.h"
 #include "heartbeater.h"
+#include "net/connection.h"
 
 namespace discord
 {
@@ -35,11 +36,9 @@ public:
 
 private:
     boost::asio::io_context &ctx;
-    tcp::resolver tcp_resolver;
-    secure_websocket websock;
+    discord::connection conn;
 
     std::shared_ptr<discord::voice_gateway_entry> entry;
-    boost::beast::multi_buffer multi_buffer;
 
     udp::socket udp_socket;
     udp::resolver udp_resolver;
@@ -67,20 +66,14 @@ private:
     void send_audio(audio_frame audio);
     void identify();
     void resume();
-    void event_loop();
-    void handle_event(const std::string &data);
+    void next_event();
+    void handle_event(const nlohmann::json &data);
     void extract_ready_info(nlohmann::json &data);
     void extract_session_info(nlohmann::json &data);
     void ip_discovery();
     void send_ip_discovery_datagram(int retries);
     void notify_heartbeater_hello(nlohmann::json &data);
     void select(uint16_t local_udp_port);
-
-    void on_resolve(const boost::system::error_code &ec, tcp::resolver::iterator it);
-    void on_connect(const boost::system::error_code &ec, tcp::resolver::iterator);
-    void on_tls_handshake(const boost::system::error_code &ec);
-    void on_websocket_handshake(const boost::system::error_code &ec);
-    void on_read(const boost::system::error_code &ec, size_t transferred);
 };
 }  // namespace discord
 
