@@ -35,9 +35,8 @@ static void update_bitrate(discord::voice_gateway_entry &entry, discord::gateway
 }
 
 discord::voice_state_listener::voice_state_listener(boost::asio::io_context &ctx, ssl::context &tls,
-                                                    discord::gateway &gateway,
-                                                    discord::gateway_store &store)
-    : ctx{ctx}, tls{tls}, gateway{gateway}, store{store}
+                                                    discord::gateway &gateway)
+    : ctx{ctx}, tls{tls}, gateway{gateway}
 {
 }
 
@@ -62,7 +61,7 @@ void discord::voice_state_listener::on_voice_state_update(const nlohmann::json &
     entry.session_id = std::move(state.session_id);
 
     if (entry.process)
-        update_bitrate(entry, store);
+        update_bitrate(entry, gateway.get_gateway_store());
 }
 
 void discord::voice_state_listener::on_voice_server_update(const nlohmann::json &data)
@@ -91,7 +90,9 @@ void discord::voice_state_listener::on_voice_server_update(const nlohmann::json 
     // We got all the information needed to join a voice gateway now
     entry->gateway =
         std::make_shared<discord::voice_gateway>(ctx, tls, entry, gateway.get_user_id());
+    std::cout << "[voice state] created voice gateway\n Connecting... \n";
     entry->gateway->connect(gateway_connect_cb);
+    std::cout << "[voice state] connect call finished\n";
 }
 
 // Listen for guild text messages indicating to join, leave, play, pause, etc.
@@ -121,7 +122,7 @@ void discord::voice_state_listener::check_command(const discord::message &m)
     std::transform(command.begin(), command.end(), command.begin(), ::tolower);
     std::string params = matcher.str(2);
 
-    auto guild_id = store.lookup_channel(m.channel_id);
+    auto guild_id = gateway.get_gateway_store().lookup_channel(m.channel_id);
     auto it = voice_gateways.find(guild_id);
 
     if (command == "join") {
@@ -145,19 +146,18 @@ void discord::voice_state_listener::check_command(const discord::message &m)
 
 void discord::voice_state_listener::do_join(const discord::message &m, const std::string &s)
 {
-    auto *guild = get_guild_from_channel(m.channel_id, store);
+    auto *guild = get_guild_from_channel(m.channel_id, gateway.get_gateway_store());
     if (!guild)
         return;
 
     auto it = voice_gateways.find(guild->id);
     bool connected = it != voice_gateways.end();
 
-    // Look through the guild's channels for channel s, if it exists, join, else fail
-    // silently
+    // Look through the guild's channels for channel s, if it exists, join, else fail silently
     for (auto channel : guild->channels) {
         if (channel.type == discord::channel::channel_type::guild_voice && channel.name == s) {
-            // Found a matching voice channel name! Join it if it is different than the currently
-            // connected channel (if any)
+            // Found a matching voice channel name! Join it if it is different
+            // than the currently connected channel (if any)
             if (!connected || (it->second && it->second->channel_id != channel.id)) {
                 join_voice_server(guild->id, channel.id);
                 return;
@@ -267,7 +267,7 @@ void discord::voice_state_listener::next_audio_source(voice_gateway_entry &entry
 
     if (!entry.process) {
         entry.process = std::make_unique<music_process>(ctx);
-        update_bitrate(entry, store);
+        update_bitrate(entry, gateway.get_gateway_store());
     }
 
     // Get the next song from the queue

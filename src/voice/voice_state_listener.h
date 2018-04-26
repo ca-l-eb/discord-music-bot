@@ -41,8 +41,8 @@ struct voice_gateway_entry {
 class voice_state_listener : public std::enable_shared_from_this<voice_state_listener>
 {
 public:
-    voice_state_listener(boost::asio::io_context &ctx, ssl::context &tls, discord::gateway &gateway,
-                         discord::gateway_store &store);
+    voice_state_listener(boost::asio::io_context &ctx, ssl::context &tls,
+                         discord::gateway &gateway);
     ~voice_state_listener() = default;
 
     void on_voice_state_update(const nlohmann::json &data);
@@ -53,7 +53,6 @@ private:
     boost::asio::io_context &ctx;
     ssl::context &tls;
     discord::gateway &gateway;
-    discord::gateway_store &store;
 
     // guild_id to voice_gateway_entry (1 voice connection per guild)
     std::map<uint64_t, std::shared_ptr<voice_gateway_entry>> voice_gateways;

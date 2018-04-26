@@ -6,13 +6,9 @@
 #include <json.hpp>
 
 using data_cb = std::function<void(const boost::system::error_code &, const uint8_t *, size_t)>;
-
 using transfer_cb = std::function<void(const boost::system::error_code &, size_t)>;
-
 using error_cb = std::function<void(const boost::system::error_code &)>;
-
 using json_cb = std::function<void(const nlohmann::json &)>;
-
 using void_cb = std::function<void()>;
 
 void ignore_transfer(const boost::system::error_code &, size_t);

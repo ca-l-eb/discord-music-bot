@@ -61,7 +61,7 @@ template<typename Beatable>
 void discord::heartbeater::start_heartbeat_timer(Beatable &b)
 {
     timer.expires_from_now(boost::posix_time::milliseconds(heartbeat_interval));
-    auto callback = [this, &b](auto &ec) { on_timer_fire(ec, b); };
+    auto callback = [=, &b](auto &ec) { on_timer_fire(ec, b); };
     timer.async_wait(callback);
 }
 
