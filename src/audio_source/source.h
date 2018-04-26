@@ -1,6 +1,7 @@
 #ifndef CMD_AUDIO_SOURCE_H
 #define CMD_AUDIO_SOURCE_H
 
+#include <cstdint>
 #include <vector>
 
 struct audio_frame {
@@ -9,6 +10,7 @@ struct audio_frame {
 };
 
 struct audio_source {
+    virtual ~audio_source() = default;
     virtual audio_frame next() = 0;
 
     // The audio source might need some preparation that can't be done in the constructor.
