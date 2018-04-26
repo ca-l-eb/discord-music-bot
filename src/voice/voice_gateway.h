@@ -24,10 +24,8 @@ struct voice_gateway_entry;
 class voice_gateway : public std::enable_shared_from_this<voice_gateway>
 {
 public:
-    voice_gateway(boost::asio::io_context &ctx, ssl::context &tls,
+    voice_gateway(boost::asio::io_context &ctx, boost::asio::ssl::context &tls,
                   std::shared_ptr<discord::voice_gateway_entry> e, uint64_t user_id);
-    ~voice_gateway() = default;
-
     void heartbeat();
     void send(const std::string &s, transfer_cb c);
     void connect(error_cb c);
@@ -37,7 +35,6 @@ public:
 private:
     boost::asio::io_context &ctx;
     discord::connection conn;
-
     std::shared_ptr<discord::voice_gateway_entry> entry;
 
     udp::socket udp_socket;

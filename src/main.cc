@@ -27,9 +27,9 @@ int main(int argc, char *argv[])
         tls.set_default_verify_paths();
         tls.set_verify_mode(ssl::context::verify_peer);
 
-        auto gateway_connection = std::make_shared<discord::connection>(ctx, tls);
-        auto gateway = discord::gateway{ctx, tls, token, *gateway_connection};
-        gateway.run();
+        auto gateway_connection = discord::connection{ctx, tls};
+        auto gateway = std::make_shared<discord::gateway>(ctx, tls, token, gateway_connection);
+        gateway->run();
 
         ctx.run();
     } catch (std::exception &e) {

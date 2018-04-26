@@ -31,6 +31,7 @@ public:
     void send(const std::string &s, transfer_cb c);
     uint64_t get_user_id() const;
     const std::string &get_session_id() const;
+    discord::gateway_store &get_gateway_store();
 
     using discord_event_cb = std::function<void(nlohmann::json &)>;
 

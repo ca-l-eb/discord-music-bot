@@ -1,15 +1,13 @@
 #ifndef DISCORD_CONNECTION_H
 #define DISCORD_CONNECTION_H
 
-#include <memory>
-
 #include "aliases.h"
 #include "callbacks.h"
 #include "net/resource_parser.h"
 
 namespace discord
 {
-class connection : public std::enable_shared_from_this<connection>
+class connection
 {
 public:
     connection(boost::asio::io_context &io, ssl::context &tls);

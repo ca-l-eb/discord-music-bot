@@ -16,7 +16,7 @@ discord::gateway::gateway(boost::asio::io_context &ctx, ssl::context &tls, const
     event_to_handler.emplace("CHANNEL_DELETE", [&](auto &json) { store.channel_delete(json); });
     event_to_handler.emplace("RESUME", [&](auto &) { state = connection_state::connected; });
 
-    auto handler = std::make_shared<voice_state_listener>(ctx, tls, *this, store);
+    auto handler = std::make_shared<voice_state_listener>(ctx, tls, *this);
     event_to_handler.emplace("VOICE_STATE_UPDATE",
                              [handler](auto &json) { handler->on_voice_state_update(json); });
     event_to_handler.emplace("VOICE_SERVER_UPDATE",
@@ -27,12 +27,13 @@ discord::gateway::gateway(boost::asio::io_context &ctx, ssl::context &tls, const
 
 void discord::gateway::run()
 {
-    conn.connect("wss://gateway.discord.gg/?v=6&encoding=json", [this](auto &ec) {
-        if (ec) {
-            throw std::runtime_error{"Could not connect: " + ec.message()};
-        }
-        identify();
-    });
+    conn.connect("wss://gateway.discord.gg/?v=6&encoding=json",
+                 [self = shared_from_this()](auto &ec) {
+                     if (ec) {
+                         throw std::runtime_error{"Could not connect: " + ec.message()};
+                     }
+                     self->identify();
+                 });
 }
 
 void discord::gateway::heartbeat()
@@ -67,12 +68,12 @@ void discord::gateway::identify()
           {"compress", false},
           {"large_threshold", 250}}}};
 
-    auto callback = [this](auto &ec, size_t) {
+    auto callback = [self = shared_from_this()](auto &ec, size_t) {
         if (ec) {
             std::cerr << "[gateway] identify send error: " << ec.message() << "\n";
         } else {
             std::cout << "[gateway] beginning event loop\n";
-            next_event();
+            self->next_event();
         }
     };
     send(identify_payload.dump(), callback);
@@ -115,7 +116,7 @@ void discord::gateway::on_ready(const nlohmann::json &data)
 void discord::gateway::next_event()
 {
     // Asynchronously read next message, on message received send it to listeners
-    conn.read([=](auto &json) { handle_event(json); });
+    conn.read([self = shared_from_this()](auto &json) { self->handle_event(json); });
 }
 
 void discord::gateway::handle_event(const nlohmann::json &j)
@@ -147,8 +148,7 @@ void discord::gateway::handle_event(const nlohmann::json &j)
                         throw std::runtime_error("Could not connect to Discord Gateway");
                     } else {
                         state = connection_state::disconnected;
-                        // Already connected, if we can reconnect, try to resume the
-                        // connection
+                        // Already connected, if we can reconnect, try to resume the connection
                         if (payload.data.is_boolean() && payload.data.get<bool>())
                             resume();
                         else
@@ -182,4 +182,9 @@ void discord::gateway::run_gateway_dispatch(nlohmann::json &data, const std::str
             it->second(data);
         }
     }
+}
+
+discord::gateway_store &discord::gateway::get_gateway_store()
+{
+    return store;
 }

@@ -47,13 +47,13 @@ void discord::voice_gateway::connect(error_cb c)
     auto parsed = resource_parser::parse(entry->endpoint);
     entry->endpoint = std::move(parsed.host);
 
-    conn.connect("wss://" + entry->endpoint + "/?v=3", [this](auto &ec) {
+    conn.connect("wss://" + entry->endpoint + "/?v=3", [self = shared_from_this()](auto &ec) {
         if (ec) {
             std::cerr << "[voice] websocket connect error: " << ec.message() << "\n";
-            boost::asio::post(ctx, [&]() { voice_connect_callback(ec); });
+            boost::asio::post(self->ctx, [&]() { self->voice_connect_callback(ec); });
         } else {
             std::cout << "[voice] websocket connected\n";
-            identify();
+            self->identify();
         }
     });
 }
@@ -85,7 +85,7 @@ void discord::voice_gateway::send(const std::string &s, transfer_cb c)
 
 void discord::voice_gateway::next_event()
 {
-    conn.read([this](auto &json) { handle_event(json); });
+    conn.read([self = shared_from_this()](auto &json) { self->handle_event(json); });
 }
 
 void discord::voice_gateway::handle_event(const nlohmann::json &data)
@@ -106,8 +106,7 @@ void discord::voice_gateway::handle_event(const nlohmann::json &data)
                 case voice_op::speaking:
                     break;
                 case voice_op::heartbeat_ack:
-                    // We should check if the nonce is the same as the one sent by the
-                    // heartbeater
+                    // We should check if the nonce is the same as the one sent by the heartbeater
                     beater.on_heartbeat_ack();
                     break;
                 case voice_op::hello:
@@ -207,8 +206,8 @@ void discord::voice_gateway::ip_discovery()
             // We got our response, cancel the next send
             self->timer.cancel();
 
-            // First 4 bytes of buffer should be SSRC, next is beginning
-            // of this udp socket's external IP
+            // First 4 bytes of buffer should be SSRC, next is beginning of this udp socket's
+            // external IP
             self->external_ip = std::string((char *) &self->buffer[4]);
 
             // Extract the port the udp socket is on (little-endian)
@@ -333,8 +332,8 @@ void discord::voice_gateway::send_audio(audio_frame frame)
     auto size = frame.opus_encoded_data.size();
     auto encrypted_len = size + 12 + crypto_secretbox_MACBYTES;
 
-    // Make sure we have enough room to store the encoded audio, 12 bytes for RTP header,
-    // crypto_secretbo_MACBYTES (for MAC) in buffer
+    // Make sure we have enough room to store the encoded audio, 12 bytes for
+    // RTP header, crypto_secretbox_MACBYTES (for MAC) in buffer
     if (encrypted_len > buffer.size())
         buffer.resize(encrypted_len);
 
