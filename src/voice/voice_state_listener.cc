@@ -90,9 +90,8 @@ void discord::voice_state_listener::on_voice_server_update(const nlohmann::json 
     // We got all the information needed to join a voice gateway now
     entry->gateway =
         std::make_shared<discord::voice_gateway>(ctx, tls, entry, gateway.get_user_id());
-    std::cout << "[voice state] created voice gateway\n Connecting... \n";
+    std::cout << "[voice state] created voice gateway\n";
     entry->gateway->connect(gateway_connect_cb);
-    std::cout << "[voice state] connect call finished\n";
 }
 
 // Listen for guild text messages indicating to join, leave, play, pause, etc.

@@ -22,6 +22,7 @@ set(SOURCE_FILES
         src/gateway_store.cc
         src/net/connection.cc
         src/net/resource_parser.cc
+        src/net/rtp.cc
         src/voice/crypto.cc
         src/voice/decoding.cc
         src/voice/opus_encoder.cc
@@ -42,6 +43,7 @@ set(HEADER_FILES
         src/heartbeater.h
         src/net/connection.h
         src/net/resource_parser.h
+        src/net/rtp.h
         src/voice/crypto.h
         src/voice/decoding.h
         src/voice/opus_encoder.h

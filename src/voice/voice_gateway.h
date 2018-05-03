@@ -1,14 +1,11 @@
 #ifndef CMD_DISCORD_VOICE_GATEWAY_H
 #define CMD_DISCORD_VOICE_GATEWAY_H
 
-#include <boost/asio/deadline_timer.hpp>
 #include <boost/asio/io_context.hpp>
-#include <boost/asio/ip/tcp.hpp>
-#include <boost/beast/core/multi_buffer.hpp>
-#include <boost/beast/websocket.hpp>
 #include <cstdint>
 #include <iostream>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "aliases.h"
@@ -16,6 +13,7 @@
 #include "callbacks.h"
 #include "heartbeater.h"
 #include "net/connection.h"
+#include "net/rtp.h"
 
 namespace discord
 {
@@ -34,28 +32,14 @@ public:
 
 private:
     boost::asio::io_context &ctx;
-    discord::connection conn;
     std::shared_ptr<discord::voice_gateway_entry> entry;
-
-    udp::socket udp_socket;
-    udp::resolver udp_resolver;
-    boost::asio::deadline_timer timer;
+    discord::connection conn;
+    discord::rtp_session rtp;
 
     uint64_t user_id;
-    uint32_t ssrc;
-    uint16_t udp_port;
-    std::vector<uint8_t> secret_key;
-    std::vector<uint8_t> buffer;
-    std::string external_ip;
-    uint32_t timestamp;
-    uint16_t seq_num;
-
     heartbeater beater;
-
     enum class connection_state { disconnected, connected } state;
-
     bool is_speaking;
-
     error_cb voice_connect_callback;
 
     void start_speaking(transfer_cb c);
@@ -67,10 +51,8 @@ private:
     void handle_event(const nlohmann::json &data);
     void extract_ready_info(nlohmann::json &data);
     void extract_session_info(nlohmann::json &data);
-    void ip_discovery();
-    void send_ip_discovery_datagram(int retries);
     void notify_heartbeater_hello(nlohmann::json &data);
-    void select(uint16_t local_udp_port);
+    void select();
 };
 }  // namespace discord
 
