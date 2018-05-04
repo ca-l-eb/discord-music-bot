@@ -1,8 +1,9 @@
 #include <gtest/gtest.h>
-#include <discord.h>
-#include <gateway_store.h>
 #include <fstream>
 #include <iostream>
+
+#include "discord.h"
+#include "gateway_store.h"
 
 std::string read_file(std::string file_path)
 {
@@ -23,7 +24,7 @@ TEST(Guild, GuildFromJson)
         std::string str = read_file("./res/guild_create1");
         if (str.empty())
             FAIL();
-        
+
         nlohmann::json json = nlohmann::json::parse(str);
         if (json.is_null())
             FAIL();
@@ -41,36 +42,36 @@ TEST(Guild, GuildFromJson)
 
 TEST(GatewayStore, LoadStore)
 {
-     try {
+    try {
         std::string g1 = read_file("./res/guild_create1");
         std::string g2 = read_file("./res/guild_create2");
         if (g1.empty() || g2.empty())
             FAIL();
-        
+
         nlohmann::json json1 = nlohmann::json::parse(g1);
         nlohmann::json json2 = nlohmann::json::parse(g2);
-        
+
         if (json1.is_null() || json2.is_null())
             FAIL();
-        
+
         discord::gateway_store store;
         store.guild_create(json1["d"]);
         store.guild_create(json2["d"]);
-        
+
         auto s = store.lookup_channel(1);
         EXPECT_EQ(0, s);
-        
+
         // Lookup a channel id in the store structure, in this case they are the same id
         auto guild_id = store.lookup_channel(312472384026181632);
         EXPECT_EQ(312472384026181632, guild_id);
-        
+
         // Same thing but with a different channel, this time with a different id
         guild_id = store.lookup_channel(312472384026181633);
         EXPECT_EQ(312472384026181632, guild_id);
     } catch (std::exception &e) {
         std::cerr << e.what() << "\n";
         FAIL();
-    }   
+    }
 }
 
 int main(int argc, char *argv[])

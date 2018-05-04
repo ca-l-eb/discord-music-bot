@@ -13,21 +13,20 @@ youtube_dl_source::youtube_dl_source(boost::asio::io_context &ctx, discord::opus
 
 audio_frame youtube_dl_source::next()
 {
-    AVFrame *avf = decoder->next_frame();
-    audio_frame frame{};
+    auto avf = decoder->next_frame();
+    auto frame = audio_frame{};
     if (avf) {
-        // buf 512 so we dont exceed UDP limit
-        unsigned char buf[512];
-        int frame_count;
-        auto *resampled_data = reinterpret_cast<int16_t *>(resampler->resample(avf, frame_count));
+        auto buf = std::array<unsigned char, 512>{};
+        auto frame_count = 0;
+        auto resampled_data = reinterpret_cast<int16_t *>(resampler->resample(avf, frame_count));
         if (frame_count > 0) {
-            // TODO: make sure frame_size is reasonable, 20 ms (960 samples) proabably
-            int encoded_len = encoder.encode(resampled_data, frame_count, buf, sizeof(buf));
+            // TODO: make sure frame_size is reasonable, 20 ms (960 samples) probably
+            auto encoded_len = encoder.encode(resampled_data, frame_count, buf.data(), sizeof(buf));
             if (encoded_len > 0) {
                 frame.frame_count = frame_count;
                 frame.opus_encoded_data.reserve(encoded_len);
-                frame.opus_encoded_data.insert(frame.opus_encoded_data.end(), buf,
-                                               buf + encoded_len);
+                frame.opus_encoded_data.insert(frame.opus_encoded_data.end(), buf.data(),
+                                               buf.data() + encoded_len);
             }
         }
     } else {
@@ -78,10 +77,9 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
     }
 
     if (!e) {
-        auto pipe_read_cb = [self = weak_from_this()](auto &ec, size_t transferred) {
-            // Only continue if still alive
-            if (!self.expired())
-                self.lock()->read_from_pipe(ec, transferred);
+        auto pipe_read_cb = [weak = weak_from_this()](auto &ec, size_t transferred) {
+            if (auto self = weak.lock())
+                self->read_from_pipe(ec, transferred);
         };
 
         // Read from the pipe and fill up the audio_file_data vector
@@ -96,8 +94,8 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
             return;
         }
 
-        boost::system::error_code be;
-        std::error_code se;
+        auto be = boost::system::error_code{};
+        auto se = std::error_code{};
 
         // Close the pipe, allow the child to terminate
         pipe.close(be);

@@ -5,8 +5,7 @@
 void discord::gateway_store::guild_create(const nlohmann::json &json)
 {
     try {
-        discord::guild g = json;
-
+        auto g = json.get<discord::guild>();
         for (auto &channel : g.channels)
             channels_to_guild[channel.id] = g.id;
 
@@ -22,7 +21,7 @@ void discord::gateway_store::guild_create(const nlohmann::json &json)
 void discord::gateway_store::channel_create(const nlohmann::json &json)
 {
     try {
-        discord::channel c = json;
+        auto c = json.get<discord::channel>();
         channels_to_guild[c.id] = c.guild_id;
         auto g = guilds[c.guild_id].get();
         if (g) {
@@ -36,7 +35,7 @@ void discord::gateway_store::channel_create(const nlohmann::json &json)
 void discord::gateway_store::channel_update(const nlohmann::json &json)
 {
     try {
-        discord::channel c = json;
+        auto c = json.get<discord::channel>();
         auto g = guilds[c.guild_id].get();
         if (g) {
             // erase old entry, replace with new channel
@@ -51,7 +50,7 @@ void discord::gateway_store::channel_update(const nlohmann::json &json)
 void discord::gateway_store::channel_delete(const nlohmann::json &json)
 {
     try {
-        discord::channel c = json;
+        auto c = json.get<discord::channel>();
         auto g = guilds[c.guild_id].get();
         if (g) {
             g->channels.erase(c);

@@ -76,7 +76,7 @@ void discord::rtp_session::send_ip_discovery_datagram(int retries, error_cb c)
 {
     auto udp_sent_cb = [=](auto &ec, auto) {
         if (ec && ec != boost::asio::error::operation_aborted) {
-            std::cerr << "[voice] could not send udp packet to voice server: " << ec.message()
+            std::cerr << "[RTP] could not send udp packet to voice server: " << ec.message()
                       << "\n";
         }
         if (retries == 0) {

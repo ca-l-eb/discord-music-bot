@@ -18,13 +18,13 @@ static discord::guild *get_guild_from_channel(uint64_t channel_id, discord::gate
 
 static void update_bitrate(discord::voice_gateway_entry &entry, discord::gateway_store &store)
 {
-    discord::guild *guild = get_guild_from_channel(entry.channel_id, store);
+    auto guild = get_guild_from_channel(entry.channel_id, store);
     if (!guild)
         return;
 
     // to_find contains channel_id to match with the desired channel to determine the audio
     // bitrate
-    discord::channel to_find;
+    auto to_find = discord::channel{};
     to_find.id = entry.channel_id;
     auto channel = guild->channels.find(to_find);
     if (channel != guild->channels.end()) {
@@ -126,16 +126,16 @@ void discord::voice_state_listener::on_message_create(const nlohmann::json &data
 
 void discord::voice_state_listener::check_command(const discord::message &m)
 {
-    static std::regex command_re{R"(^:(\S+)(?:\s+(.+))?$)"};
-    std::smatch matcher;
+    static auto command_re = std::regex{R"(^:(\S+)(?:\s+(.+))?$)"};
+    auto matcher = std::smatch{};
     std::regex_search(m.content, matcher, command_re);
 
     if (matcher.empty())
         return;
 
-    std::string command = matcher.str(1);
+    auto command = matcher.str(1);
+    auto params = matcher.str(2);
     std::transform(command.begin(), command.end(), command.begin(), ::tolower);
-    std::string params = matcher.str(2);
 
     auto guild_id = gateway.get_gateway_store().lookup_channel(m.channel_id);
     auto it = voice_gateways.find(guild_id);
@@ -166,7 +166,7 @@ void discord::voice_state_listener::do_join(const discord::message &m, const std
         return;
 
     auto it = voice_gateways.find(guild->id);
-    bool connected = it != voice_gateways.end();
+    auto connected = it != voice_gateways.end();
 
     // Look through the guild's channels for channel s, if it exists, join, else fail silently
     for (auto channel : guild->channels) {
@@ -232,16 +232,16 @@ void discord::voice_state_listener::do_pause(discord::voice_gateway_entry &entry
 
 void discord::voice_state_listener::join_voice_server(uint64_t guild_id, uint64_t channel_id)
 {
-    std::string guild_str = std::to_string(guild_id);
-    std::string channel_str = std::to_string(channel_id);
+    auto guild_str = std::to_string(guild_id);
+    auto channel_str = std::to_string(channel_id);
 
     // After join, we expect back a VOICE_STATE_UPDATE event
-    nlohmann::json json{{"op", static_cast<int>(gateway_op::voice_state_update)},
-                        {"d",
-                         {{"guild_id", guild_str},
-                          {"channel_id", channel_str},
-                          {"self_mute", false},
-                          {"self_deaf", false}}}};
+    auto json = nlohmann::json{{"op", static_cast<int>(gateway_op::voice_state_update)},
+                               {"d",
+                                {{"guild_id", guild_str},
+                                 {"channel_id", channel_str},
+                                 {"self_mute", false},
+                                 {"self_deaf", false}}}};
     gateway.send(json.dump(), print_transfer_info);
 }
 
@@ -249,13 +249,13 @@ void discord::voice_state_listener::leave_voice_server(uint64_t guild_id)
 {
     // json serializer doesn't like being passed char* pointing to nullptr,
     // so I guess we need to double this method
-    std::string guild_str = std::to_string(guild_id);
-    nlohmann::json json{{"op", static_cast<int>(gateway_op::voice_state_update)},
-                        {"d",
-                         {{"guild_id", guild_str},
-                          {"channel_id", nullptr},
-                          {"self_mute", false},
-                          {"self_deaf", false}}}};
+    auto guild_str = std::to_string(guild_id);
+    auto json = nlohmann::json{{"op", static_cast<int>(gateway_op::voice_state_update)},
+                               {"d",
+                                {{"guild_id", guild_str},
+                                 {"channel_id", nullptr},
+                                 {"self_mute", false},
+                                 {"self_deaf", false}}}};
     gateway.send(json.dump(), print_transfer_info);
 }
 
@@ -286,7 +286,7 @@ void discord::voice_state_listener::next_audio_source(voice_gateway_entry &entry
     }
 
     // Get the next song from the queue
-    std::string next = std::move(entry.music_queue.front());
+    auto next = std::move(entry.music_queue.front());
     entry.music_queue.pop_front();
 
     auto callback = [&](auto &ec) {
@@ -303,8 +303,9 @@ void discord::voice_state_listener::next_audio_source(voice_gateway_entry &entry
         std::cerr << "[voice state] invalid audio source\n";
         return;
     }
-    static std::set<std::string> valid_youtube_dl_sources{"youtube.com", "youtu.be",
-                                                          "www.youtube.com"};
+    static auto valid_youtube_dl_sources =
+        std::set<std::string>{"youtube.com", "youtu.be", "www.youtube.com"};
+
     if (valid_youtube_dl_sources.count(parsed.host)) {
         entry.process->source =
             std::make_shared<youtube_dl_source>(ctx, entry.process->encoder, next, callback);

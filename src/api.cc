@@ -4,7 +4,7 @@
 
 #include "api.h"
 
-/*
+#if 0
 discord::api::api(const std::string &token) : token{token}
 {
     // Guess that the global limit is around 20
@@ -165,4 +165,4 @@ std::string discord::api::get_gateway()
     auto success = check_success(request, 200, api_limit_param::global);
     return "";
 }
-*/
+#endif

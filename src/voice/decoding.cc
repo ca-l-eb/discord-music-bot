@@ -9,7 +9,7 @@
 static int read_packet(void *opaque, uint8_t *buf, int buf_size)
 {
     assert(opaque);
-    buffer_data *bd = (buffer_data *) opaque;
+    auto bd = reinterpret_cast<buffer_data *>(opaque);
 
     buf_size = FFMIN((size_t) buf_size, bd->data.size() - bd->loc);
     if (buf_size < 0)
@@ -22,7 +22,7 @@ static int read_packet(void *opaque, uint8_t *buf, int buf_size)
 static int64_t seek(void *opaque, int64_t offset, int whence)
 {
     assert(opaque);
-    buffer_data *bd = (buffer_data *) opaque;
+    auto bd = reinterpret_cast<buffer_data *>(opaque);
     switch (whence) {
         case SEEK_SET:
             return bd->loc = offset;
@@ -104,7 +104,7 @@ void audio_decoder::open_decoder()
     if (stream_index < 0)
         throw std::runtime_error{"No stream found"};
 
-    AVStream *stream = format_context->streams[stream_index];
+    auto stream = format_context->streams[stream_index];
 
     // We weren't able to get decoder when opening stream, find decoder by stream's codec_id
     if (!decoder) {
@@ -121,7 +121,7 @@ void audio_decoder::open_decoder()
     if (avcodec_parameters_to_context(decoder_context, stream->codecpar) < 0)
         throw std::runtime_error{"Failed to copy audio codec parameters to decoder context"};
 
-    AVDictionary *opts = nullptr;
+    auto opts = static_cast<AVDictionary *>(nullptr);
     av_dict_set(&opts, "refcounted_frames", "1", 0);
     if (avcodec_open2(decoder_context, decoder, &opts) < 0)
         throw std::runtime_error{"Failed to open decoder for stream"};
@@ -142,7 +142,7 @@ audio_decoder::~audio_decoder()
 
 int audio_decoder::read()
 {
-    int ret = 0;
+    auto ret = 0;
     av_init_packet(&packet);
     // Grab the next packet for the audio stream we're interested in
     while ((ret = av_read_frame(format_context, &packet)) >= 0) {
@@ -158,7 +158,7 @@ int audio_decoder::read()
 // Feed the decoder the next packet from the demuxer (format_context)
 int audio_decoder::feed(bool flush)
 {
-    int ret;
+    auto ret = 0;
     if (flush) {
         ret = avcodec_send_packet(decoder_context, nullptr);
         do_read = false;
@@ -191,7 +191,7 @@ int audio_decoder::decode()
     assert(frame);
 
     // Retrieve (decoded) frame from decoder
-    int ret = avcodec_receive_frame(decoder_context, frame);
+    auto ret = avcodec_receive_frame(decoder_context, frame);
 
     if (ret == AVERROR(EAGAIN)) {
         // "Error receiving frame from decoder
@@ -205,7 +205,7 @@ int audio_decoder::decode()
 
 AVFrame *audio_decoder::next_frame()
 {
-    int ret = 0;
+    auto ret = 0;
     if (do_read)
         ret = read();
     if (ret || do_feed)
@@ -256,7 +256,7 @@ audio_resampler::~audio_resampler()
 void *audio_resampler::resample(AVFrame *frame, int &frame_count)
 {
     assert(swr);
-    int swr_output_count = swr_get_out_samples(swr, frame->nb_samples);
+    auto swr_output_count = swr_get_out_samples(swr, frame->nb_samples);
     if (swr_output_count < 0) {
         frame_count = 0;
         return nullptr;
