@@ -27,6 +27,7 @@ public:
     void heartbeat();
     void send(const std::string &s, transfer_cb c);
     void connect(error_cb c);
+    void disconnect();
     void play(audio_frame frame);
     void stop();
 

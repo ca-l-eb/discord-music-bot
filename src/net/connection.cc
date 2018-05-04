@@ -20,25 +20,22 @@ void discord::connection::connect(const std::string &url, error_cb c)
     resolver.async_resolve(query, [this](auto &ec, auto it) { on_resolve(ec, it); });
 }
 
+void discord::connection::disconnect()
+{
+    auto ec = boost::system::error_code{};
+    websock.close(boost::beast::websocket::close_code::normal, ec);
+    websock.lowest_layer().close(ec);
+}
+
 void discord::connection::read(json_cb c)
 {
     websock.async_read(buffer, [c, this](auto &ec, auto transferred) {
-        if (ec) {
-            if (!websock.is_open()) {
-                auto close_reason = websock.reason();
-                auto gateway_err = make_error_code(static_cast<gateway_errc>(close_reason.code));
-                std::cerr << "close code: " << close_reason.code
-                          << " reason: " << close_reason.reason << "\n";
-
-                std::cerr << "[connection] gateway error: " << gateway_err.message() << "\n";
-            }
-            std::cerr << "[connection] error reading message: " << ec.message() << "\n";
-            c({});
-        } else {
+        auto json = nlohmann::json{};
+        if (!ec) {
             auto data = boost::beast::buffers_to_string(buffer.data());
-            auto json = nlohmann::json::parse(data);
-            c(json);
+            json = nlohmann::json::parse(data);
         }
+        c(ec, json);
         buffer.consume(transferred);
     });
 }
@@ -87,4 +84,11 @@ void discord::connection::on_tls_handshake(const boost::system::error_code &ec)
 void discord::connection::on_websocket_handshake(const boost::system::error_code &ec)
 {
     connect_cb(ec);
+}
+
+int discord::connection::close_code()
+{
+    if (websock.is_open())
+        return -1;
+    return websock.reason().code;
 }

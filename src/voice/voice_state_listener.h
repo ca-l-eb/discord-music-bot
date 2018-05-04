@@ -43,8 +43,9 @@ class voice_state_listener : public std::enable_shared_from_this<voice_state_lis
 public:
     voice_state_listener(boost::asio::io_context &ctx, ssl::context &tls,
                          discord::gateway &gateway);
-    ~voice_state_listener() = default;
+    ~voice_state_listener();
 
+    void disconnect();
     void on_voice_state_update(const nlohmann::json &data);
     void on_voice_server_update(const nlohmann::json &data);
     void on_message_create(const nlohmann::json &data);

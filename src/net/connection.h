@@ -12,8 +12,10 @@ class connection
 public:
     connection(boost::asio::io_context &io, ssl::context &tls);
     void connect(const std::string &url, error_cb c);
+    void disconnect();
     void read(json_cb c);
     void send(const std::string &s, transfer_cb c);
+    int close_code();
 
 private:
     boost::asio::io_context &ctx;

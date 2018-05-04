@@ -27,6 +27,7 @@ public:
             discord::connection &c);
     ~gateway() = default;
     void run();
+    void disconnect();
     void heartbeat();
     void send(const std::string &s, transfer_cb c);
     uint64_t get_user_id() const;
@@ -47,7 +48,7 @@ private:
     std::string session_id;
     uint64_t user_id;
     int seq_num;
-    enum class connection_state { disconnected, connected } state;
+    enum class connection_state { disconnected, connecting, connected } state;
 
     void identify();
     void resume();

@@ -5,6 +5,21 @@
 #include "gateway.h"
 #include "voice/voice_state_listener.h"
 
+static void check_quit(discord::gateway *gateway, boost::asio::io_context &ctx,
+                       nlohmann::json &json)
+{
+    const auto my_user_id = 112721982570713088;
+    auto message = json.get<discord::message>();
+    if (message.author.id == my_user_id) {
+        if (message.content == ":q" || message.content == ":quit") {
+            std::cout << "[gateway] disconnecting...\n";
+            gateway->disconnect();
+            ctx.restart();
+            ctx.stop();
+        }
+    }
+}
+
 discord::gateway::gateway(boost::asio::io_context &ctx, ssl::context &tls, const std::string &token,
                           discord::connection &c)
     : conn{c}, beater{ctx}, token{token}, state{connection_state::disconnected}
@@ -23,17 +38,29 @@ discord::gateway::gateway(boost::asio::io_context &ctx, ssl::context &tls, const
                              [handler](auto &json) { handler->on_voice_server_update(json); });
     event_to_handler.emplace("MESSAGE_CREATE",
                              [handler](auto &json) { handler->on_message_create(json); });
+    event_to_handler.emplace("MESSAGE_CREATE",
+                             [this, &ctx](auto &json) { check_quit(this, ctx, json); });
 }
 
 void discord::gateway::run()
 {
     conn.connect("wss://gateway.discord.gg/?v=6&encoding=json",
-                 [self = shared_from_this()](auto &ec) {
-                     if (ec) {
-                         throw std::runtime_error{"Could not connect: " + ec.message()};
+                 [weak = weak_from_this()](auto &ec) {
+                     if (auto self = weak.lock()) {
+                         if (ec) {
+                             throw std::runtime_error{"Could not connect: " + ec.message()};
+                         }
+                         self->state = connection_state::connecting;
+                         self->identify();
                      }
-                     self->identify();
                  });
+}
+
+void discord::gateway::disconnect()
+{
+    state = connection_state::disconnected;
+    conn.disconnect();
+    event_to_handler.clear();
 }
 
 void discord::gateway::heartbeat()
@@ -68,12 +95,14 @@ void discord::gateway::identify()
           {"compress", false},
           {"large_threshold", 250}}}};
 
-    auto callback = [self = shared_from_this()](auto &ec, size_t) {
-        if (ec) {
-            std::cerr << "[gateway] identify send error: " << ec.message() << "\n";
-        } else {
-            std::cout << "[gateway] beginning event loop\n";
-            self->next_event();
+    auto callback = [weak = weak_from_this()](auto &ec, size_t) {
+        if (auto self = weak.lock()) {
+            if (ec) {
+                std::cerr << "[gateway] identify send error: " << ec.message() << "\n";
+            } else {
+                std::cout << "[gateway] beginning event loop\n";
+                self->next_event();
+            }
         }
     };
     send(identify_payload.dump(), callback);
@@ -116,60 +145,66 @@ void discord::gateway::on_ready(const nlohmann::json &data)
 void discord::gateway::next_event()
 {
     // Asynchronously read next message, on message received send it to listeners
-    conn.read([self = shared_from_this()](auto &json) { self->handle_event(json); });
+    if (state != connection_state::disconnected)
+        conn.read([weak = weak_from_this()](auto &ec, auto &json) {
+            if (ec) {
+                std::cerr << "[gateway] error: " << ec.message() << "\n";
+                return;
+            }
+            if (auto self = weak.lock())
+                self->handle_event(json);
+        });
 }
 
 void discord::gateway::handle_event(const nlohmann::json &j)
 {
-    if (!j.empty()) {
-        std::cout << "[gateway] " << j.dump() << "\n";
-        try {
-            auto payload = j.get<discord::payload>();
-            seq_num = payload.sequence_num;
+    std::cout << "[gateway] " << j.dump() << "\n";
+    try {
+        auto payload = j.get<discord::payload>();
+        seq_num = payload.sequence_num;
 
-            if (payload.event_name == "MESSAGE_CREATE") {
-                auto message = payload.data.get<discord::message>();
-            }
-
-            switch (payload.op) {
-                case gateway_op::dispatch:
-                    run_gateway_dispatch(payload.data, payload.event_name);
-                    break;
-                case gateway_op::heartbeat:
-                    heartbeat();  // Respond to heartbeats with a heartbeat
-                    break;
-                case gateway_op::reconnect:
-                    // We are asked to reconnect, i.e. we are disconnected
-                    state = connection_state::disconnected;
-                    resume();
-                    break;
-                case gateway_op::invalid_session:
-                    if (state == connection_state::disconnected) {
-                        throw std::runtime_error("Could not connect to Discord Gateway");
-                    } else {
-                        state = connection_state::disconnected;
-                        // Already connected, if we can reconnect, try to resume the connection
-                        if (payload.data.is_boolean() && payload.data.get<bool>())
-                            resume();
-                        else
-                            throw std::runtime_error("disconnected");
-                    }
-                    break;
-                case gateway_op::hello:
-                    beater.on_hello(payload.data, *this);
-                    break;
-                case gateway_op::heartbeat_ack:
-                    beater.on_heartbeat_ack();
-                    break;
-                default:
-                    throw std::runtime_error("Unknown opcode: " +
-                                             std::to_string(static_cast<int>(payload.op)));
-            }
-        } catch (nlohmann::json::exception &e) {
-            std::cerr << "[gateway] " << e.what() << "\n";
+        if (payload.event_name == "MESSAGE_CREATE") {
+            auto message = payload.data.get<discord::message>();
         }
+
+        switch (payload.op) {
+            case gateway_op::dispatch:
+                run_gateway_dispatch(payload.data, payload.event_name);
+                break;
+            case gateway_op::heartbeat:
+                heartbeat();  // Respond to heartbeats with a heartbeat
+                break;
+            case gateway_op::reconnect:
+                // We are asked to reconnect, i.e. we are disconnected
+                state = connection_state::disconnected;
+                resume();
+                break;
+            case gateway_op::invalid_session:
+                if (state == connection_state::disconnected) {
+                    throw std::runtime_error("Could not connect to Discord Gateway");
+                } else {
+                    state = connection_state::disconnected;
+                    // Already connected, if we can reconnect, try to resume the connection
+                    if (payload.data.is_boolean() && payload.data.get<bool>())
+                        resume();
+                    else
+                        throw std::runtime_error("disconnected");
+                }
+                break;
+            case gateway_op::hello:
+                beater.on_hello(payload.data, *this);
+                break;
+            case gateway_op::heartbeat_ack:
+                beater.on_heartbeat_ack();
+                break;
+            default:
+                throw std::runtime_error("Unknown opcode: " +
+                                         std::to_string(static_cast<int>(payload.op)));
+        }
+        next_event();
+    } catch (nlohmann::json::exception &e) {
+        std::cerr << "[gateway] " << e.what() << "\n";
     }
-    next_event();
 }
 
 void discord::gateway::run_gateway_dispatch(nlohmann::json &data, const std::string &event_name)

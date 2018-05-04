@@ -31,16 +31,24 @@ void discord::voice_gateway::connect(error_cb c)
     auto parsed = resource_parser::parse(entry->endpoint);
     entry->endpoint = std::move(parsed.host);
 
-    conn.connect("wss://" + entry->endpoint + "/?v=3", [self = shared_from_this()](auto &ec) {
-        if (ec) {
-            std::cerr << "[voice] websocket connect error: " << ec.message() << "\n";
-            boost::asio::post(self->ctx, [&]() { self->voice_connect_callback(ec); });
-        } else {
-            std::cout << "[voice] websocket connected\n";
-            self->state = connection_state::connected;
-            self->identify();
+    conn.connect("wss://" + entry->endpoint + "/?v=3", [weak = weak_from_this()](auto &ec) {
+        if (auto self = weak.lock()) {
+            if (ec) {
+                std::cerr << "[voice] websocket connect error: " << ec.message() << "\n";
+                boost::asio::post(self->ctx, [&]() { self->voice_connect_callback(ec); });
+            } else {
+                std::cout << "[voice] websocket connected\n";
+                self->state = connection_state::connected;
+                self->identify();
+            }
         }
     });
+}
+
+void discord::voice_gateway::disconnect()
+{
+    state = connection_state::disconnected;
+    conn.disconnect();
 }
 
 void discord::voice_gateway::identify()
@@ -70,47 +78,53 @@ void discord::voice_gateway::send(const std::string &s, transfer_cb c)
 
 void discord::voice_gateway::next_event()
 {
-    conn.read([self = shared_from_this()](auto &json) { self->handle_event(json); });
+    if (state == connection_state::connected)
+        conn.read([weak = weak_from_this()](auto &ec, auto &json) {
+            if (ec) {
+                std::cerr << "[voice] error: " << ec.message() << "\n";
+                return;
+            }
+            if (auto self = weak.lock())
+                self->handle_event(json);
+        });
 }
 
 void discord::voice_gateway::handle_event(const nlohmann::json &data)
 {
-    if (!data.empty()) {
-        std::cout << "[voice] " << data.dump() << "\n";
-        // Parse the results as a json object
-        try {
-            auto payload = data.get<discord::voice_payload>();
+    std::cout << "[voice] " << data.dump() << "\n";
+    try {
+        auto payload = data.get<discord::voice_payload>();
 
-            switch (payload.op) {
-                case voice_op::ready:
-                    extract_ready_info(payload.data);
-                    break;
-                case voice_op::session_description:
-                    extract_session_info(payload.data);
-                    break;
-                case voice_op::speaking:
-                    break;
-                case voice_op::heartbeat_ack:
-                    // We should check if the nonce is the same as the one sent by the heartbeater
-                    beater.on_heartbeat_ack();
-                    break;
-                case voice_op::hello:
-                    notify_heartbeater_hello(payload.data);
-                    break;
-                case voice_op::resumed:
-                    // Successfully resumed
-                    state = connection_state::connected;
-                    break;
-                case voice_op::client_disconnect:
-                    break;
-                default:
-                    break;
-            }
-        } catch (std::exception &e) {
-            std::cerr << "[voice] gateway error: " << e.what() << "\n";
+        switch (payload.op) {
+            case voice_op::ready:
+                extract_ready_info(payload.data);
+                break;
+            case voice_op::session_description:
+                extract_session_info(payload.data);
+                break;
+            case voice_op::speaking:
+                break;
+            case voice_op::heartbeat_ack:
+                // We should check if the nonce is the same as the one sent by the
+                // heartbeater
+                beater.on_heartbeat_ack();
+                break;
+            case voice_op::hello:
+                notify_heartbeater_hello(payload.data);
+                break;
+            case voice_op::resumed:
+                // Successfully resumed
+                state = connection_state::connected;
+                break;
+            case voice_op::client_disconnect:
+                break;
+            default:
+                break;
         }
+        next_event();
+    } catch (nlohmann::json::exception &e) {
+        std::cerr << "[voice] gateway error: " << e.what() << "\n";
     }
-    next_event();
 }
 
 void discord::voice_gateway::heartbeat()
@@ -125,17 +139,21 @@ void discord::voice_gateway::extract_ready_info(nlohmann::json &data)
     auto ready_info = data.get<discord::voice_ready>();
     rtp.set_ssrc(ready_info.ssrc);
 
-    auto connect_cb = [self = shared_from_this()](auto &ec) {
-        if (ec) {
-            boost::asio::post(self->ctx, [=]() { self->voice_connect_callback(ec); });
-        } else {
-            self->rtp.ip_discovery([=](auto &ecc) {
-                if (ecc) {
-                    self->voice_connect_callback(ecc);
-                } else {
-                    self->select();
-                }
-            });
+    auto connect_cb = [weak = weak_from_this()](auto &ec) {
+        if (auto self = weak.lock()) {
+            if (ec) {
+                boost::asio::post(self->ctx, [=]() { self->voice_connect_callback(ec); });
+            } else {
+                self->rtp.ip_discovery([weak](auto &ecc) {
+                    if (auto self = weak.lock()) {
+                        if (ecc) {
+                            self->voice_connect_callback(ecc);
+                        } else {
+                            self->select();
+                        }
+                    }
+                });
+            }
         }
     };
     rtp.connect(entry->endpoint, std::to_string(ready_info.port), connect_cb);
