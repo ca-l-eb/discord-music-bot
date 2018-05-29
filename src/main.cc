@@ -4,9 +4,9 @@
 #include <thread>
 
 #include "aliases.h"
+#include "audio/decoding.h"
 #include "gateway.h"
 #include "net/connection.h"
-#include "voice/decoding.h"
 
 int main(int argc, char *argv[])
 {

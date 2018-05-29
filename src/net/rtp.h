@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "aliases.h"
-#include "audio_source/source.h"
+#include "audio/source.h"
 #include "callbacks.h"
 
 namespace discord

@@ -4,7 +4,7 @@
 #include <memory>
 #include <vector>
 
-#include "voice/decoding.h"
+#include "audio/decoding.h"
 
 // Some data has been requested, write the results into buf, return the amount of bytes written
 static int read_packet(void *opaque, uint8_t *buf, int buf_size)

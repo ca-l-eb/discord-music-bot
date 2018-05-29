@@ -7,10 +7,10 @@
 #include <boost/process/child.hpp>
 #include <memory>
 
-#include "audio_source/source.h"
+#include "audio/decoding.h"
+#include "audio/opus_encoder.h"
+#include "audio/source.h"
 #include "callbacks.h"
-#include "voice/decoding.h"
-#include "voice/opus_encoder.h"
 
 class youtube_dl_source : public audio_source,
                           public std::enable_shared_from_this<youtube_dl_source>

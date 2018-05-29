@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "aliases.h"
-#include "audio_source/source.h"
+#include "audio/source.h"
 #include "callbacks.h"
 #include "heartbeater.h"
 #include "net/connection.h"

@@ -7,9 +7,9 @@
 #include <deque>
 #include <memory>
 
-#include "audio_source/source.h"
+#include "audio/opus_encoder.h"
+#include "audio/source.h"
 #include "gateway.h"
-#include "voice/opus_encoder.h"
 
 namespace discord
 {

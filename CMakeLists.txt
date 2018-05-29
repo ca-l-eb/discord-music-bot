@@ -14,7 +14,9 @@ pkg_check_modules(FFMPEG REQUIRED libavutil libswresample libavcodec libavformat
 
 set(SOURCE_FILES
         src/api.cc
-        src/audio_source/youtube_dl.cc
+        src/audio/decoding.cc
+        src/audio/opus_encoder.cc
+        src/audio/youtube_dl.cc
         src/callbacks.cc
         src/discord.cc
         src/errors.cc
@@ -24,8 +26,6 @@ set(SOURCE_FILES
         src/net/resource_parser.cc
         src/net/rtp.cc
         src/voice/crypto.cc
-        src/voice/decoding.cc
-        src/voice/opus_encoder.cc
         src/voice/voice_gateway.cc
         src/voice/voice_state_listener.cc
         )
@@ -33,8 +33,10 @@ set(SOURCE_FILES
 set(HEADER_FILES
         src/aliases.h
         src/api.h
-        src/audio_source/source.h
-        src/audio_source/youtube_dl.h
+        src/audio/decoding.h
+        src/audio/opus_encoder.h
+        src/audio/source.h
+        src/audio/youtube_dl.h
         src/callbacks.h
         src/discord.h
         src/errors.h
@@ -45,8 +47,6 @@ set(HEADER_FILES
         src/net/resource_parser.h
         src/net/rtp.h
         src/voice/crypto.h
-        src/voice/decoding.h
-        src/voice/opus_encoder.h
         src/voice/voice_gateway.h
         src/voice/voice_state_listener.h
         )

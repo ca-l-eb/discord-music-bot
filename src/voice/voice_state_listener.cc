@@ -3,7 +3,7 @@
 #include <regex>
 #include <set>
 
-#include "audio_source/youtube_dl.h"
+#include "audio/youtube_dl.h"
 #include "net/resource_parser.h"
 #include "voice/voice_state_listener.h"
 
