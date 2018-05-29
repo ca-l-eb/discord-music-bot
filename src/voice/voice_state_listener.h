@@ -18,10 +18,10 @@ class voice_gateway;
 struct music_process {
     boost::asio::io_context &ctx;
     boost::asio::deadline_timer timer;
-    discord::opus_encoder encoder{2, 48000};
+    discord::opus_encoder encoder;
     std::shared_ptr<audio_source> source;
 
-    music_process(boost::asio::io_context &ctx) : ctx{ctx}, timer{ctx} {}
+    music_process(boost::asio::io_context &ctx) : ctx{ctx}, timer{ctx}, encoder{2, 48000} {}
 };
 
 struct voice_gateway_entry {
@@ -33,9 +33,9 @@ struct voice_gateway_entry {
 
     enum class state { disconnected, connected, playing, paused } p_state;
 
-    std::deque<std::string> music_queue;
     std::shared_ptr<discord::voice_gateway> gateway;
     std::unique_ptr<music_process> process;
+    std::deque<std::string> music_queue;
 };
 
 class voice_state_listener : public std::enable_shared_from_this<voice_state_listener>

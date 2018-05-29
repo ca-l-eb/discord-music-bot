@@ -14,8 +14,8 @@ discord::voice_gateway::voice_gateway(boost::asio::io_context &ctx, ssl::context
     , entry{e}
     , conn{ctx, tls}
     , rtp{ctx}
-    , user_id{user_id}
     , beater{ctx}
+    , user_id{user_id}
     , state{connection_state::disconnected}
     , is_speaking{false}
 {
@@ -231,7 +231,7 @@ void discord::voice_gateway::stop_speaking(transfer_cb c)
     do_speak(this, c, false);
 }
 
-void discord::voice_gateway::play(audio_frame frame)
+void discord::voice_gateway::play(opus_frame frame)
 {
     if (!is_speaking) {
         auto speak_sent_cb = [=](auto &ec, auto) {
@@ -254,7 +254,7 @@ void discord::voice_gateway::stop()
     stop_speaking(ignore_transfer);
 }
 
-void discord::voice_gateway::send_audio(audio_frame frame)
+void discord::voice_gateway::send_audio(opus_frame frame)
 {
     rtp.send(frame);
 }

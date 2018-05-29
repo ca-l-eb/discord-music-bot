@@ -324,28 +324,36 @@ void discord::voice_state_listener::send_audio(voice_gateway_entry &entry)
     auto end = std::chrono::high_resolution_clock::now();
     auto time_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
-    if (!frame.opus_encoded_data.empty()) {
+    auto timer_done_cb = [weak = weak_from_this(), &entry](auto &ec) {
+        if (auto self = weak.lock()) {
+            if (!ec && entry.p_state == voice_gateway_entry::state::playing) {
+                self->send_audio(entry);
+            }
+        }
+    };
+
+    if (!frame.data.empty()) {
+        auto fc = frame.frame_count;
+        if (!(fc == 120 || fc == 240 || fc == 480 || fc == 960 || fc == 1920 || fc == 2880)) {
+            std::cerr << "[voice state] invalid frame size: " << fc << "\n";
+            return;
+        }
         // Next timer expires after frame_size / 48000 seconds, or frame size / 48 ms
         entry.process->timer.expires_from_now(
             boost::posix_time::microseconds(((frame.frame_count * 1000) / 48) - time_us.count()));
 
         // Play the frame
         entry.gateway->play(frame);
-
-        auto timer_done_cb = [weak = weak_from_this(), &entry](auto &ec) {
-            if (auto self = weak.lock()) {
-                if (!ec && entry.p_state == voice_gateway_entry::state::playing) {
-                    self->send_audio(entry);
-                }
-            }
-        };
-        // Enqueue wait for the frame to send
-        entry.process->timer.async_wait(timer_done_cb);
-    } else {
+    } else if (!frame.end_of_source) {
+        // Data from source not yet available... try again in a little
+        entry.process->timer.expires_from_now(boost::posix_time::milliseconds(20));
+    }
+    if (frame.end_of_source) {
         // Done with the current source, play next entry
         std::cout << "[voice state] sound clip finished\n";
         entry.gateway->stop();
         entry.p_state = voice_gateway_entry::state::connected;
         play(entry);
     }
+    entry.process->timer.async_wait(timer_done_cb);
 }

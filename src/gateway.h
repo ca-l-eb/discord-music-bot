@@ -39,7 +39,7 @@ public:
 private:
     discord::connection &conn;
     discord::gateway_store store;
-    heartbeater beater;
+    discord::heartbeater beater;
 
     // Map an event name (e.g. READY, RESUMED, etc.) to a handler
     std::multimap<std::string, discord_event_cb> event_to_handler;

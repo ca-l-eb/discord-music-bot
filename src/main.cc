@@ -21,8 +21,6 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE;
         }
 
-        av_register_all();  // Initialize libavformat
-
         auto ctx = boost::asio::io_context{};
         auto tls = ssl::context{ssl::context::tls_client};
         tls.set_default_verify_paths();

@@ -31,6 +31,11 @@ private:
     friend class audio_decoder;
 };
 
+struct av_frame {
+    AVFrame *data;
+    bool eof;
+};
+
 class audio_decoder
 {
 public:
@@ -39,7 +44,7 @@ public:
     int read();
     int feed(bool flush);
     int decode();
-    AVFrame *next_frame();  // Get next frame from the audio stream
+    av_frame next_frame();  // Get next frame from the audio stream
     int open_input(avio_info &av);
     int find_stream_info();
     int find_best_stream();
@@ -54,6 +59,7 @@ private:
     int stream_index;  // Audio stream in format_context
     bool do_read;
     bool do_feed;
+    bool eof;
 
     friend class audio_resampler;
 };
@@ -69,7 +75,7 @@ private:
 public:
     audio_resampler(audio_decoder &decoder, int sample_rate, int channels, AVSampleFormat format);
     ~audio_resampler();
-    void *resample(AVFrame *frame, int &frame_count);
+    int resample(AVFrame *frame, void **data);
 };
 
 #endif

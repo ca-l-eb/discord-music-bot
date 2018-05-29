@@ -14,7 +14,7 @@ resource_parser::parsed_url resource_parser::parse(const std::string &url)
     std::string resource;
     int port = -1;
     if (matcher.empty())
-        return {"", "", -1, ""};
+        return {"", "", "", -1};
 
     proto = matcher.str(1);
     host = matcher.str(2);
@@ -30,5 +30,5 @@ resource_parser::parsed_url resource_parser::parse(const std::string &url)
         resource = matcher.str(4);
     else
         resource = "/";
-    return {proto, host, port, resource};
+    return {proto, host, resource, port};
 }

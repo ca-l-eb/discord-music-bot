@@ -19,7 +19,7 @@ public:
     youtube_dl_source(boost::asio::io_context &ctx, discord::opus_encoder &encoder,
                       const std::string &url, error_cb c);
     virtual ~youtube_dl_source() = default;
-    virtual audio_frame next();
+    virtual opus_frame next();
     virtual void prepare();
 
 private:

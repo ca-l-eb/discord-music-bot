@@ -1,5 +1,6 @@
 #include <cassert>
 #include <exception>
+#include <iostream>
 #include <memory>
 #include <vector>
 
@@ -165,6 +166,7 @@ int audio_decoder::feed(bool flush)
     } else {
         // Send the packet to the decoder
         ret = avcodec_send_packet(decoder_context, &packet);
+        eof = false;
     }
 
     if (ret == AVERROR(EAGAIN)) {
@@ -194,18 +196,20 @@ int audio_decoder::decode()
     auto ret = avcodec_receive_frame(decoder_context, frame);
 
     if (ret == AVERROR(EAGAIN)) {
-        // "Error receiving frame from decoder
+        // Error receiving frame from decoder
     } else if (ret == AVERROR_EOF) {
         // Decoder is fully flushed. No more output frames
+        eof = true;
     } else if (ret == AVERROR(EINVAL)) {
         throw std::runtime_error{"Attempted to use an unopened decoder"};
     }
     return ret;
 }
 
-AVFrame *audio_decoder::next_frame()
+av_frame audio_decoder::next_frame()
 {
     auto ret = 0;
+    auto av = av_frame{};
     if (do_read)
         ret = read();
     if (ret || do_feed)
@@ -219,7 +223,9 @@ AVFrame *audio_decoder::next_frame()
             av_frame_free(&frame);
         frame = nullptr;
     }
-    return frame;
+    av.data = frame;
+    av.eof = eof;
+    return av;
 }
 
 audio_resampler::audio_resampler(audio_decoder &decoder, int sample_rate, int channels,
@@ -253,13 +259,14 @@ audio_resampler::~audio_resampler()
         av_free(frame_buf);
 }
 
-void *audio_resampler::resample(AVFrame *frame, int &frame_count)
+int audio_resampler::resample(AVFrame *frame, void **data)
 {
     assert(swr);
     auto swr_output_count = swr_get_out_samples(swr, frame->nb_samples);
+    auto frame_count = 0;
     if (swr_output_count < 0) {
-        frame_count = 0;
-        return nullptr;
+        *data = nullptr;
+        return frame_count;
     }
 
     if (swr_output_count > current_alloc) {
@@ -272,5 +279,6 @@ void *audio_resampler::resample(AVFrame *frame, int &frame_count)
         frame_count = swr_convert(swr, &frame_buf, swr_output_count,
                                   const_cast<const uint8_t **>(frame->data), frame->nb_samples);
     }
-    return frame_buf;
+    *data = frame_buf;
+    return frame_count;
 }

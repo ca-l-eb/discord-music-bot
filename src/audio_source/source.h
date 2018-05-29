@@ -4,14 +4,15 @@
 #include <cstdint>
 #include <vector>
 
-struct audio_frame {
-    std::vector<uint8_t> opus_encoded_data;
+struct opus_frame {
+    std::vector<uint8_t> data;
     int frame_count;
+    bool end_of_source;
 };
 
 struct audio_source {
     virtual ~audio_source() = default;
-    virtual audio_frame next() = 0;
+    virtual opus_frame next() = 0;
 
     // The audio source might need some preparation that can't be done in the constructor.
     // E.g. youtube_dl_source needs to create a child process and begin reading from async_pipe,

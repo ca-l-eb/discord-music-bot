@@ -28,7 +28,7 @@ public:
     void send(const std::string &s, transfer_cb c);
     void connect(error_cb c);
     void disconnect();
-    void play(audio_frame frame);
+    void play(opus_frame frame);
     void stop();
 
 private:
@@ -36,16 +36,16 @@ private:
     std::shared_ptr<discord::voice_gateway_entry> entry;
     discord::connection conn;
     discord::rtp_session rtp;
+    discord::heartbeater beater;
 
     uint64_t user_id;
-    heartbeater beater;
     enum class connection_state { disconnected, connected } state;
     bool is_speaking;
     error_cb voice_connect_callback;
 
     void start_speaking(transfer_cb c);
     void stop_speaking(transfer_cb c);
-    void send_audio(audio_frame audio);
+    void send_audio(opus_frame audio);
     void identify();
     void resume();
     void next_event();

@@ -8,8 +8,8 @@ namespace resource_parser
 struct parsed_url {
     std::string protocol;
     std::string host;
-    int port;
     std::string resource;
+    int port;
 };
 parsed_url parse(const std::string &url);
 }  // namespace resource_parser

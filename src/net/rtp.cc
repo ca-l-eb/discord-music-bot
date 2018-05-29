@@ -119,16 +119,18 @@ static void write_rtp_header(unsigned char *buffer, uint16_t seq_num, uint32_t t
 
 static void print_rtp_send_info(const boost::system::error_code &ec, size_t transferred)
 {
+    static auto bytes_sent = 0LL;
+    bytes_sent += transferred;
     if (ec) {
         std::cerr << "[RTP] error: " << ec.message() << "\n";
     } else {
-        std::cout << "[RTP] " << transferred << " bytes sent\r";
+        std::cout << "[RTP] " << transferred << " bytes sent (" << bytes_sent << " total)\r";
     }
 }
 
-void discord::rtp_session::send(audio_frame frame)
+void discord::rtp_session::send(opus_frame frame)
 {
-    auto size = frame.opus_encoded_data.size();
+    auto size = frame.data.size();
     auto encrypted_len = size + 12 + crypto_secretbox_MACBYTES;
 
     // Make sure we have enough room to store the encoded audio, 12 bytes for
@@ -149,8 +151,8 @@ void discord::rtp_session::send(audio_frame frame)
     seq_num++;
     timestamp += frame.frame_count;
 
-    auto error = discord::crypto::xsalsa20_poly1305_encrypt(
-        frame.opus_encoded_data.data(), write_audio, size, secret_key.data(), nonce.data());
+    auto error = discord::crypto::xsalsa20_poly1305_encrypt(frame.data.data(), write_audio, size,
+                                                            secret_key.data(), nonce.data());
 
     if (error) {
         std::cerr << "[RTP] error encrypting data\n";

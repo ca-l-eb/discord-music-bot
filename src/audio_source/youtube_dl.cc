@@ -11,27 +11,33 @@ youtube_dl_source::youtube_dl_source(boost::asio::io_context &ctx, discord::opus
 {
 }
 
-audio_frame youtube_dl_source::next()
+opus_frame youtube_dl_source::next()
 {
     auto avf = decoder->next_frame();
-    auto frame = audio_frame{};
-    if (avf) {
+    auto frame = opus_frame{};
+    if (avf.data && !avf.eof) {
         auto buf = std::array<unsigned char, 512>{};
-        auto frame_count = 0;
-        auto resampled_data = reinterpret_cast<int16_t *>(resampler->resample(avf, frame_count));
+        auto resampled = static_cast<float *>(nullptr);
+        auto frame_count = resampler->resample(avf.data, reinterpret_cast<void **>(&resampled));
         if (frame_count > 0) {
             // TODO: make sure frame_size is reasonable, 20 ms (960 samples) probably
-            auto encoded_len = encoder.encode(resampled_data, frame_count, buf.data(), sizeof(buf));
+            auto encoded_len =
+                encoder.encode_float(resampled, frame_count, buf.data(), sizeof(buf));
             if (encoded_len > 0) {
                 frame.frame_count = frame_count;
-                frame.opus_encoded_data.reserve(encoded_len);
-                frame.opus_encoded_data.insert(frame.opus_encoded_data.end(), buf.data(),
-                                               buf.data() + encoded_len);
+                frame.data.reserve(encoded_len);
+                frame.data.insert(frame.data.end(), buf.data(), buf.data() + encoded_len);
+                frame.end_of_source = false;
             }
         }
-    } else {
+        // std::cout << "[youtube-dl source] source frame count: " << avf.data->nb_samples
+        //          << " resampled frame count:" << frame.frame_count << "\n";
+    }
+    if (avf.eof) {
         // We read the last frame, clear any used memory
+        std::cout << "[youtube-dl source] got end of source\n";
         audio_file_data.clear();
+        frame.end_of_source = true;
     }
     return frame;
 }
@@ -139,7 +145,7 @@ void youtube_dl_source::try_stream()
             state = decoder_state::opened_decoder;
         }
         if (state == decoder_state::opened_decoder) {
-            resampler = std::make_unique<audio_resampler>(*decoder, 48000, 2, AV_SAMPLE_FMT_S16);
+            resampler = std::make_unique<audio_resampler>(*decoder, 48000, 2, AV_SAMPLE_FMT_FLT);
             state = decoder_state::ready;
         }
     } catch (std::exception &e) {
