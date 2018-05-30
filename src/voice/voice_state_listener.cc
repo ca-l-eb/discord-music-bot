@@ -346,7 +346,7 @@ void discord::voice_state_listener::send_audio(voice_gateway_entry &entry)
         entry.gateway->play(frame);
     } else if (!frame.end_of_source) {
         // Data from source not yet available... try again in a little
-        entry.process->timer.expires_from_now(boost::posix_time::milliseconds(20));
+        entry.process->timer.expires_from_now(boost::posix_time::microseconds(500));
     }
     if (frame.end_of_source) {
         // Done with the current source, play next entry

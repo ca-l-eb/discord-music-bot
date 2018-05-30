@@ -1,6 +1,7 @@
 #ifndef CMD_DECODING_H
 #define CMD_DECODING_H
 
+#include <boost/circular_buffer.hpp>
 #include <vector>
 
 extern "C" {
@@ -72,10 +73,46 @@ private:
     int current_alloc;
     AVSampleFormat format;
 
+    void grow();
+
 public:
     audio_resampler(audio_decoder &decoder, int sample_rate, int channels, AVSampleFormat format);
     ~audio_resampler();
-    int resample(AVFrame *frame, void **data);
+    int resample(av_frame frame, void **data);
+};
+
+template<typename T, int sample_rate, int channels, AVSampleFormat format>
+class simple_audio_decoder
+{
+public:
+    simple_audio_decoder();
+    ~simple_audio_decoder() = default;
+    void feed(const void *data, size_t bytes);
+    int read(T *data, int samples);
+    int available();
+    bool ready();
+    bool done();
+
+private:
+    boost::circular_buffer<T> output_buffer;
+    std::unique_ptr<avio_info> avio;
+    std::unique_ptr<audio_decoder> decoder;
+    std::unique_ptr<audio_resampler> resampler;
+    std::vector<uint8_t> input_buffer;
+
+    enum class decoder_state {
+        start,
+        opened_input,
+        found_stream_info,
+        found_best_stream,
+        opened_decoder,
+        ready,
+        eof
+    } state;
+
+    void try_stream();
 };
 
 #endif
+
+using float_audio_decoder = simple_audio_decoder<float, 48000, 2, AV_SAMPLE_FMT_FLT>;

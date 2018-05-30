@@ -28,30 +28,15 @@ private:
     boost::process::child child;
     boost::process::async_pipe pipe;
 
-    // Holds the entire contents of an audio file in some format
-    std::vector<uint8_t> audio_file_data;
-    std::array<uint8_t, 4096> buffer;
-
-    std::unique_ptr<avio_info> avio;
-    std::unique_ptr<audio_decoder> decoder;
-    std::unique_ptr<audio_resampler> resampler;
+    float_audio_decoder decoder;
+    std::array<uint8_t, 8192> buffer;
 
     error_cb callback;
     const std::string &url;
     bool notified;
 
-    enum class decoder_state {
-        start,
-        opened_input,
-        found_stream_info,
-        found_best_stream,
-        opened_decoder,
-        ready
-    } state;
-
     void make_process(const std::string &url);
     void read_from_pipe(const boost::system::error_code &e, size_t transferred);
-    void try_stream();
 };
 
 #endif
