@@ -59,6 +59,7 @@ public:
     audio_resampler(audio_decoder &decoder);
     ~audio_resampler();
     audio_samples<T> resample(av_frame frame);
+    int delayed_samples();
 };
 
 using float_resampler = audio_resampler<float, AV_SAMPLE_FMT_FLT, 48000, 2>;
@@ -112,7 +113,6 @@ private:
     std::unique_ptr<audio_decoder> decoder;
     std::unique_ptr<resampler_type> resampler;
     std::vector<uint8_t> input_buffer;
-    std::vector<T> output_buffer;
 
     enum class decoder_state {
         start,

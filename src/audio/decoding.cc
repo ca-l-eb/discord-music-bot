@@ -22,6 +22,7 @@ static int read_packet(void *opaque, uint8_t *buf, int buf_size)
     return buf_size;
 }
 
+#if 0
 static int64_t seek(void *opaque, int64_t offset, int whence)
 {
     std::cout << "seek ";
@@ -44,6 +45,7 @@ static int64_t seek(void *opaque, int64_t offset, int whence)
     }
     return -1;
 }
+#endif
 
 avio_info::avio_info(std::vector<uint8_t> &audio_data) : audio_file_data{audio_data, 0}
 {
@@ -56,7 +58,6 @@ avio_info::avio_info(std::vector<uint8_t> &audio_data) : audio_file_data{audio_d
     // which allows us to point to an already allocated area of memory that contains the media
     avio_context = avio_alloc_context(avio_buf, avio_buf_len, 0, &audio_file_data, &read_packet,
                                       nullptr, nullptr);
-                                      //nullptr, &seek);
     if (!avio_context)
         throw std::runtime_error{"Could not allocate AVIO context"};
 }
@@ -241,7 +242,7 @@ av_frame audio_decoder::next_frame()
 
 template<typename T, AVSampleFormat format, int sample_rate, int channels>
 audio_resampler<T, format, sample_rate, channels>::audio_resampler(audio_decoder &decoder)
-    : frame_buf{nullptr}, current_alloc{256}
+    : frame_buf{nullptr}, current_alloc{960}
 {
     static_assert(sample_rate > 0);
     static_assert(channels > 0);
@@ -264,7 +265,7 @@ audio_resampler<T, format, sample_rate, channels>::audio_resampler(audio_decoder
         throw std::runtime_error{"Could not initialize audio resampler"};
     }
 
-    grow(512);
+    grow(current_alloc);
 }
 
 template <typename T, AVSampleFormat format, int sample_rate, int channels>
@@ -299,13 +300,15 @@ audio_samples<T> audio_resampler<T, format, sample_rate, channels>::resample(av_
     assert(swr);
     assert(frame_buf);
     auto frame_count = 0;
+    std::cout << "delay before=" << delayed_samples() << " ";
     if (frame.data) {
+#if 0
         auto estimated_output = swr_get_out_samples(swr, frame.data->nb_samples);
         if (estimated_output < 0)
             return {nullptr, 0};
         if (estimated_output > current_alloc)
             grow(estimated_output);
-
+#endif
         frame_count =
             swr_convert(swr, &frame_buf, current_alloc,
                         const_cast<const uint8_t **>(frame.data->data), frame.data->nb_samples);
@@ -313,14 +316,21 @@ audio_samples<T> audio_resampler<T, format, sample_rate, channels>::resample(av_
         frame_count = swr_convert(swr, &frame_buf, current_alloc, nullptr, 0);
     }
 
+    std::cout << "after=" << delayed_samples() << "\n";
     return {reinterpret_cast<T *>(frame_buf), frame_count};
+}
+
+template <typename T, AVSampleFormat format, int sample_rate, int channels>
+int audio_resampler<T, format, sample_rate, channels>::delayed_samples()
+{
+    assert(swr);
+    return swr_get_delay(swr, sample_rate);
 }
 
 template<typename T, AVSampleFormat format, int sample_rate, int channels>
 simple_audio_decoder<T, format, sample_rate, channels>::simple_audio_decoder()
     : avio{std::make_unique<avio_info>(input_buffer)}
     , decoder{std::make_unique<audio_decoder>()}
-    , output_buffer(16384)
     , state{decoder_state::start}
 {
     static_assert(sample_rate > 0);
@@ -340,47 +350,43 @@ void simple_audio_decoder<T, format, sample_rate, channels>::feed(const uint8_t 
 template<typename T, AVSampleFormat format, int sample_rate, int channels>
 int simple_audio_decoder<T, format, sample_rate, channels>::read(T *data, int samples)
 {
+    assert(data);
+    assert(samples > 0);
+
     auto audio = audio_samples<T>{};
     if (state == decoder_state::eof) {
         audio = resampler->resample({});
     } else {
         auto avf = decoder->next_frame();
-        if (data && samples > 0 && avf.data) {
+        if (avf.data) {
             audio = resampler->resample(avf);
         }
         if (avf.eof) {
             state = decoder_state::eof;
-            return read(data, samples);
         }
     }
+
     if (audio.frame_count > 0) {
         auto start = audio.data;
         auto end = audio.data + audio.frame_count * channels;
-        output_buffer.insert(output_buffer.end(), start, end);
-    }
-    if (state == decoder_state::eof) {
-        // if we got eof, read the remaining samples
-        samples = std::min<int>(samples, output_buffer.size() / channels);
-    }
-    if (output_buffer.size() >= static_cast<size_t>(samples * channels)) {
-        std::copy(output_buffer.begin(), output_buffer.begin() + samples * channels, data);
-        output_buffer.erase(output_buffer.begin(), output_buffer.begin() + samples * channels);
-        // output_buffer.erase_begin(samples * channels);
-        return samples;
+        //output_buffer.insert(output_buffer.end(), start, end);
+        std::copy(start, end, data);
+        return audio.frame_count;
     }
     if (audio.frame_count == 0 && state == decoder_state::eof) {
         // decoder gave eof and resampler isn't giving more data... completely done
         input_buffer.clear();
-        return 0;
     }
-    return read(data, samples);
+    if (resampler->delayed_samples() > 0)
+        return read(data, samples);
+    return 0;
 }
 
 template<typename T, AVSampleFormat format, int sample_rate, int channels>
 int simple_audio_decoder<T, format, sample_rate, channels>::available()
 {
     if (ready())
-        return output_buffer.size();
+        return resampler->delayed_samples();
     return 0;
 }
 
