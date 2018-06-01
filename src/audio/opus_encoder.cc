@@ -25,7 +25,7 @@ int32_t discord::opus_encoder::encode(const int16_t *src, int frame_size, unsign
     return opus_encode(encoder, src, frame_size, dest, dest_size);
 }
 
-int32_t discord::opus_encoder::encode_float(const float *src, int frame_size, unsigned char *dest,
+int32_t discord::opus_encoder::encode(const float *src, int frame_size, unsigned char *dest,
                                             int dest_size)
 {
     return opus_encode_float(encoder, src, frame_size, dest, dest_size);

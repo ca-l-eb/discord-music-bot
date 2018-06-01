@@ -1,18 +1,20 @@
+#include <algorithm>
 #include <cassert>
 #include <exception>
 #include <iostream>
 #include <memory>
 #include <vector>
 
-#include "audio/decoding.h"
+#include "decoding.h"
 
 // Some data has been requested, write the results into buf, return the amount of bytes written
 static int read_packet(void *opaque, uint8_t *buf, int buf_size)
 {
     assert(opaque);
     auto bd = reinterpret_cast<buffer_data *>(opaque);
-
-    buf_size = FFMIN((size_t) buf_size, bd->data.size() - bd->loc);
+    std::cout << "read_packet " << buf_size << " buffered=" << bd->data.size() << " loc=" << bd->loc
+              << "\n";
+    buf_size = std::min<int>(buf_size, bd->data.size() - bd->loc);
     if (buf_size < 0)
         return 0;
     memcpy(buf, &bd->data[bd->loc], buf_size);
@@ -22,17 +24,23 @@ static int read_packet(void *opaque, uint8_t *buf, int buf_size)
 
 static int64_t seek(void *opaque, int64_t offset, int whence)
 {
+    std::cout << "seek ";
     assert(opaque);
     auto bd = reinterpret_cast<buffer_data *>(opaque);
     switch (whence) {
         case SEEK_SET:
+            std::cout << "SEEK_SET " << offset << "\n";
             return bd->loc = offset;
         case SEEK_CUR:
+            std::cout << "SEEK_CUR " << offset << "\n";
             return bd->loc += offset;
         case SEEK_END:
+            std::cout << "SEEK_END " << offset << "\n";
             return bd->loc = bd->data.size() + offset;
         case AVSEEK_SIZE:
+            std::cout << "AVSEEK_SIZE " << offset << "\n";
             return bd->data.size();
+            //return -1;
     }
     return -1;
 }
@@ -47,7 +55,8 @@ avio_info::avio_info(std::vector<uint8_t> &audio_data) : audio_file_data{audio_d
     // Instead of using avformat_open_input and passing path, we're going to use AVIO
     // which allows us to point to an already allocated area of memory that contains the media
     avio_context = avio_alloc_context(avio_buf, avio_buf_len, 0, &audio_file_data, &read_packet,
-                                      nullptr, &seek);
+                                      nullptr, nullptr);
+                                      //nullptr, &seek);
     if (!avio_context)
         throw std::runtime_error{"Could not allocate AVIO context"};
 }
@@ -72,7 +81,7 @@ audio_decoder::audio_decoder()
         throw std::runtime_error{"Unable to allocate audio frame"};
 }
 
-int audio_decoder::open_input(avio_info &av)
+void audio_decoder::open_input(avio_info &av)
 {
     format_context = avformat_alloc_context();
     if (!format_context)
@@ -83,21 +92,25 @@ int audio_decoder::open_input(avio_info &av)
 
     // Open the file, read the header, export information into format_context
     // Frees format_context on failure
-    return avformat_open_input(&format_context, nullptr, nullptr, nullptr);
+    if (avformat_open_input(&format_context, "audio-stream", nullptr, nullptr) != 0)
+        throw std::runtime_error{"avformat failed to open input"};
 }
 
-int audio_decoder::find_stream_info()
+void audio_decoder::find_stream_info()
 {
     // Some format do not have header, or do not store enough information there so try to read
     // and decode a few frames if necessary to find missing information
-    return avformat_find_stream_info(format_context, nullptr);
+    if( avformat_find_stream_info(format_context, nullptr) < 0)
+        throw std::runtime_error{"avformat failed to find stream info"};
 }
 
-int audio_decoder::find_best_stream()
+void audio_decoder::find_best_stream()
 {
     // Get best audio stream from format_context, and possibly decoder for this stream
-    return stream_index =
+    stream_index =
                av_find_best_stream(format_context, AVMEDIA_TYPE_AUDIO, -1, -1, &decoder, 0);
+    if (stream_index < 0)
+        throw std::runtime_error{"failed to find best audio stream"};
 }
 
 void audio_decoder::open_decoder()
@@ -210,7 +223,6 @@ int audio_decoder::decode()
 av_frame audio_decoder::next_frame()
 {
     auto ret = 0;
-    auto av = av_frame{};
     if (do_read)
         ret = read();
     if (ret || do_feed)
@@ -224,15 +236,16 @@ av_frame audio_decoder::next_frame()
             av_frame_free(&frame);
         frame = nullptr;
     }
-    av.data = frame;
-    av.eof = eof;
-    return av;
+    return {frame, eof};
 }
 
-audio_resampler::audio_resampler(audio_decoder &decoder, int sample_rate, int channels,
-                                 AVSampleFormat format)
-    : frame_buf{nullptr}, current_alloc{256}, format{format}
+template<typename T, AVSampleFormat format, int sample_rate, int channels>
+audio_resampler<T, format, sample_rate, channels>::audio_resampler(audio_decoder &decoder)
+    : frame_buf{nullptr}, current_alloc{256}
 {
+    static_assert(sample_rate > 0);
+    static_assert(channels > 0);
+
     swr = swr_alloc();
     if (!swr)
         throw std::runtime_error{"Could not allocate resampling context"};
@@ -251,10 +264,11 @@ audio_resampler::audio_resampler(audio_decoder &decoder, int sample_rate, int ch
         throw std::runtime_error{"Could not initialize audio resampler"};
     }
 
-    grow();
+    grow(512);
 }
 
-audio_resampler::~audio_resampler()
+template <typename T, AVSampleFormat format, int sample_rate, int channels>
+audio_resampler<T, format, sample_rate, channels>::~audio_resampler()
 {
     if (swr)
         swr_free(&swr);
@@ -262,34 +276,36 @@ audio_resampler::~audio_resampler()
         av_free(frame_buf);
 }
 
-void audio_resampler::grow()
+template <typename T, AVSampleFormat format, int sample_rate, int channels>
+void audio_resampler<T, format, sample_rate, channels>::grow(int bytes_wanted)
 {
+    while (bytes_wanted > current_alloc)
+        current_alloc *= 2;
+
     if (frame_buf)
         av_free(frame_buf);
 
-    current_alloc *= 2;
-    av_samples_alloc(&frame_buf, nullptr, 2, current_alloc, format, 0);
+    av_samples_alloc(&frame_buf, nullptr, channels, current_alloc, format, 0);
 
     if (!frame_buf)
-        throw std::runtime_error{"Coult not allocate resample buffer"};
+        throw std::runtime_error{"Could not allocate resample buffer"};
 
     std::cout << "[audio resampler] buffer grew to hold " << current_alloc << "\n";
 }
 
-int audio_resampler::resample(av_frame frame, void **data)
+template <typename T, AVSampleFormat format, int sample_rate, int channels>
+audio_samples<T> audio_resampler<T, format, sample_rate, channels>::resample(av_frame frame)
 {
     assert(swr);
+    assert(frame_buf);
     auto frame_count = 0;
     if (frame.data) {
-        auto swr_output_count = swr_get_out_samples(swr, frame.data->nb_samples);
-        if (swr_output_count < 0) {
-            *data = nullptr;
-            return 0;
-        }
+        auto estimated_output = swr_get_out_samples(swr, frame.data->nb_samples);
+        if (estimated_output < 0)
+            return {nullptr, 0};
+        if (estimated_output > current_alloc)
+            grow(estimated_output);
 
-        while (swr_output_count > current_alloc) {
-            grow();
-        }
         frame_count =
             swr_convert(swr, &frame_buf, current_alloc,
                         const_cast<const uint8_t **>(frame.data->data), frame.data->nb_samples);
@@ -297,104 +313,109 @@ int audio_resampler::resample(av_frame frame, void **data)
         frame_count = swr_convert(swr, &frame_buf, current_alloc, nullptr, 0);
     }
 
-    *data = frame_buf;
-    return frame_count;
+    return {reinterpret_cast<T *>(frame_buf), frame_count};
 }
 
-template<typename T, int sample_rate, int channels, AVSampleFormat format>
-simple_audio_decoder<T, sample_rate, channels, format>::simple_audio_decoder()
-    : output_buffer(16384)
-    , avio{std::make_unique<avio_info>(input_buffer)}
+template<typename T, AVSampleFormat format, int sample_rate, int channels>
+simple_audio_decoder<T, format, sample_rate, channels>::simple_audio_decoder()
+    : avio{std::make_unique<avio_info>(input_buffer)}
     , decoder{std::make_unique<audio_decoder>()}
+    , output_buffer(16384)
     , state{decoder_state::start}
 {
     static_assert(sample_rate > 0);
     static_assert(channels > 0);
 }
 
-template<typename T, int sample_rate, int channels, AVSampleFormat format>
-void simple_audio_decoder<T, sample_rate, channels, format>::feed(const void *data, size_t bytes)
+template<typename T, AVSampleFormat format, int sample_rate, int channels>
+void simple_audio_decoder<T, format, sample_rate, channels>::feed(const uint8_t *data, size_t bytes)
 {
-    auto source = reinterpret_cast<const uint8_t *>(data);
     if (data && bytes > 0) {
-        input_buffer.insert(input_buffer.end(), source, source + bytes);
+        input_buffer.insert(input_buffer.end(), data, data + bytes);
         if (state != decoder_state::ready)
-            try_stream();
+            check_stream();
     }
 }
 
-template<typename T, int sample_rate, int channels, AVSampleFormat format>
-int simple_audio_decoder<T, sample_rate, channels, format>::read(T *data, int samples)
+template<typename T, AVSampleFormat format, int sample_rate, int channels>
+int simple_audio_decoder<T, format, sample_rate, channels>::read(T *data, int samples)
 {
-    auto resampled = static_cast<T *>(nullptr);
-    auto frame_count = 0;
+    auto audio = audio_samples<T>{};
     if (state == decoder_state::eof) {
-        frame_count = resampler->resample({}, reinterpret_cast<void **>(&resampled));
+        audio = resampler->resample({});
+    } else {
+        auto avf = decoder->next_frame();
+        if (data && samples > 0 && avf.data) {
+            audio = resampler->resample(avf);
+        }
+        if (avf.eof) {
+            state = decoder_state::eof;
+            return read(data, samples);
+        }
     }
-    auto avf = decoder->next_frame();
-    if (data && samples > 0 && avf.data) {
-        frame_count = resampler->resample(avf, reinterpret_cast<void **>(&resampled));
+    if (audio.frame_count > 0) {
+        auto start = audio.data;
+        auto end = audio.data + audio.frame_count * channels;
+        output_buffer.insert(output_buffer.end(), start, end);
     }
-    if (frame_count > 0) {
-        output_buffer.insert(output_buffer.end(), resampled, resampled + frame_count * channels);
+    if (state == decoder_state::eof) {
+        // if we got eof, read the remaining samples
+        samples = std::min<int>(samples, output_buffer.size() / channels);
     }
     if (output_buffer.size() >= static_cast<size_t>(samples * channels)) {
         std::copy(output_buffer.begin(), output_buffer.begin() + samples * channels, data);
         output_buffer.erase(output_buffer.begin(), output_buffer.begin() + samples * channels);
+        // output_buffer.erase_begin(samples * channels);
         return samples;
     }
-    if (avf.eof) {
+    if (audio.frame_count == 0 && state == decoder_state::eof) {
+        // decoder gave eof and resampler isn't giving more data... completely done
         input_buffer.clear();
-        state = decoder_state::eof;
         return 0;
     }
     return read(data, samples);
 }
 
-template<typename T, int sample_rate, int channels, AVSampleFormat format>
-int simple_audio_decoder<T, sample_rate, channels, format>::available()
+template<typename T, AVSampleFormat format, int sample_rate, int channels>
+int simple_audio_decoder<T, format, sample_rate, channels>::available()
 {
     if (ready())
         return output_buffer.size();
-    return -1;
+    return 0;
 }
 
-template<typename T, int sample_rate, int channels, AVSampleFormat format>
-bool simple_audio_decoder<T, sample_rate, channels, format>::ready()
+template<typename T, AVSampleFormat format, int sample_rate, int channels>
+bool simple_audio_decoder<T, format, sample_rate, channels>::ready()
 {
     return state == decoder_state::ready;
 }
 
-template<typename T, int sample_rate, int channels, AVSampleFormat format>
-bool simple_audio_decoder<T, sample_rate, channels, format>::done()
+template<typename T, AVSampleFormat format, int sample_rate, int channels>
+bool simple_audio_decoder<T, format, sample_rate, channels>::done()
 {
     return state == decoder_state::eof;
 }
 
-template<typename T, int sample_rate, int channels, AVSampleFormat format>
-void simple_audio_decoder<T, sample_rate, channels, format>::try_stream()
+template<typename T, AVSampleFormat format, int sample_rate, int channels>
+void simple_audio_decoder<T, format, sample_rate, channels>::check_stream()
 {
     try {
         switch (state) {
             // yes, fall through
             case decoder_state::start:
-                if (decoder->open_input(*avio) >= 0) {
-                    state = decoder_state::opened_input;
-                }
+                decoder->open_input(*avio);
+                state = decoder_state::opened_input;
             case decoder_state::opened_input:
-                if (decoder->find_stream_info() >= 0) {
-                    state = decoder_state::found_stream_info;
-                }
+                decoder->find_stream_info();
+                state = decoder_state::found_stream_info;
             case decoder_state::found_stream_info:
-                if (decoder->find_best_stream() >= 0) {
-                    state = decoder_state::found_best_stream;
-                }
+                decoder->find_best_stream();
+                state = decoder_state::found_best_stream;
             case decoder_state::found_best_stream:
                 decoder->open_decoder();
                 state = decoder_state::opened_decoder;
             case decoder_state::opened_decoder:
-                resampler =
-                    std::make_unique<audio_resampler>(*decoder, sample_rate, channels, format);
+                resampler = std::make_unique<resampler_type>(*decoder);
                 state = decoder_state::ready;
             default:
                 break;
@@ -405,4 +426,7 @@ void simple_audio_decoder<T, sample_rate, channels, format>::try_stream()
 }
 
 // explicit instantiation
-template class simple_audio_decoder<float, 48000, 2, AV_SAMPLE_FMT_FLT>;
+template class simple_audio_decoder<float, AV_SAMPLE_FMT_FLT, 48000, 2>;
+template class simple_audio_decoder<int16_t, AV_SAMPLE_FMT_S16, 48000, 2>;
+template class audio_resampler<float, AV_SAMPLE_FMT_FLT, 48000, 2>;
+template class audio_resampler<int16_t, AV_SAMPLE_FMT_S16, 48000, 2>;

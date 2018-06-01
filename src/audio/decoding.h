@@ -17,6 +17,17 @@ struct buffer_data {
     size_t loc;
 };
 
+struct av_frame {
+    AVFrame *data;
+    bool eof;
+};
+
+template<typename T>
+struct audio_samples {
+    T *data;
+    int frame_count;
+};
+
 class avio_info
 {
 public:
@@ -32,10 +43,26 @@ private:
     friend class audio_decoder;
 };
 
-struct av_frame {
-    AVFrame *data;
-    bool eof;
+class audio_decoder;
+
+template<typename T, AVSampleFormat format, int sample_rate, int channels>
+class audio_resampler
+{
+private:
+    SwrContext *swr;
+    uint8_t *frame_buf;
+    int current_alloc;
+
+    void grow(int bytes_wanted);
+
+public:
+    audio_resampler(audio_decoder &decoder);
+    ~audio_resampler();
+    audio_samples<T> resample(av_frame frame);
 };
+
+using float_resampler = audio_resampler<float, AV_SAMPLE_FMT_FLT, 48000, 2>;
+using s16_resampler = audio_resampler<int16_t, AV_SAMPLE_FMT_S16, 48000, 2>;
 
 class audio_decoder
 {
@@ -46,9 +73,9 @@ public:
     int feed(bool flush);
     int decode();
     av_frame next_frame();  // Get next frame from the audio stream
-    int open_input(avio_info &av);
-    int find_stream_info();
-    int find_best_stream();
+    void open_input(avio_info &av);
+    void find_stream_info();
+    void find_best_stream();
     void open_decoder();
 
 private:
@@ -62,43 +89,30 @@ private:
     bool do_feed;
     bool eof;
 
-    friend class audio_resampler;
+    friend float_resampler;
+    friend s16_resampler;
 };
 
-class audio_resampler
-{
-private:
-    SwrContext *swr;
-    uint8_t *frame_buf;
-    int current_alloc;
-    AVSampleFormat format;
-
-    void grow();
-
-public:
-    audio_resampler(audio_decoder &decoder, int sample_rate, int channels, AVSampleFormat format);
-    ~audio_resampler();
-    int resample(av_frame frame, void **data);
-};
-
-template<typename T, int sample_rate, int channels, AVSampleFormat format>
+template<typename T, AVSampleFormat format, int sample_rate, int channels>
 class simple_audio_decoder
 {
 public:
     simple_audio_decoder();
     ~simple_audio_decoder() = default;
-    void feed(const void *data, size_t bytes);
+    void feed(const uint8_t *data, size_t bytes);
     int read(T *data, int samples);
     int available();
     bool ready();
     bool done();
 
 private:
-    boost::circular_buffer<T> output_buffer;
+    using resampler_type = audio_resampler<T, format, sample_rate, channels>;
+
     std::unique_ptr<avio_info> avio;
     std::unique_ptr<audio_decoder> decoder;
-    std::unique_ptr<audio_resampler> resampler;
+    std::unique_ptr<resampler_type> resampler;
     std::vector<uint8_t> input_buffer;
+    std::vector<T> output_buffer;
 
     enum class decoder_state {
         start,
@@ -110,9 +124,10 @@ private:
         eof
     } state;
 
-    void try_stream();
+    void check_stream();
 };
 
 #endif
 
-using float_audio_decoder = simple_audio_decoder<float, 48000, 2, AV_SAMPLE_FMT_FLT>;
+using float_audio_decoder = simple_audio_decoder<float, AV_SAMPLE_FMT_FLT, 48000, 2>;
+using s16_audio_decoder = simple_audio_decoder<int16_t, AV_SAMPLE_FMT_S16, 48000, 2>;

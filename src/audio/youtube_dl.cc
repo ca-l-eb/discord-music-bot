@@ -6,8 +6,6 @@
 #include "audio/youtube_dl.h"
 
 static const auto channels = 2;
-static const auto sample_rate = 48000;
-static const auto format = AV_SAMPLE_FMT_FLT;
 
 youtube_dl_source::youtube_dl_source(boost::asio::io_context &ctx, discord::opus_encoder &encoder,
                                      const std::string &url, error_cb c)
@@ -27,18 +25,22 @@ opus_frame youtube_dl_source::next()
 
         frame.end_of_source = true;
 
-        std::fill(buffer + read * channels, buffer + frames_wanted * channels, 0);
+        // Want to clear the remaining frames to 0
+        auto start = buffer + read * channels;
+        auto end = buffer + frames_wanted * channels;
+        std::fill(start, end, 0.0f);
+
         std::cout << "[youtube-dl source] got last frame from simple decoder\n";
     }
     if (read > 0) {
         auto buf = std::array<uint8_t, 512>{};
-        auto encoded_len = encoder.encode_float(buffer, frames_wanted, buf.data(), buf.size());
+        auto encoded_len = encoder.encode(buffer, frames_wanted, buf.data(), buf.size());
         if (encoded_len > 0) {
             frame.data.reserve(encoded_len);
             frame.data.insert(std::begin(frame.data), buf.data(), buf.data() + encoded_len);
-            frame.frame_count = read;
         }
     }
+    frame.frame_count = frames_wanted;
     return frame;
 }
 
@@ -65,11 +67,10 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
     if (transferred > 0) {
         // Commit any transferred data to the audio_file_data vector
         decoder.feed(buffer.data(), transferred);
-
-        if ((!notified && decoder.ready()) || e == boost::asio::error::eof) {
-            notified = true;
-            boost::asio::post(ctx, [=]() { callback({}); });
-        }
+    }
+    if (!notified && decoder.ready()) {
+        notified = true;
+        boost::asio::post(ctx, [=]() { callback({}); });
     }
 
     if (!e) {
@@ -77,18 +78,10 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
             if (auto self = weak.lock())
                 self->read_from_pipe(ec, transferred);
         };
-
         // Read from the pipe and fill up the audio_file_data vector
         boost::asio::async_read(pipe, boost::asio::buffer(buffer), pipe_read_cb);
     } else if (e == boost::asio::error::eof) {
         std::cout << "[youtube-dl source] got eof from async_pipe\n";
-
-        if (!decoder.ready() && !notified) {
-            // TODO: add error codes
-            boost::asio::post(ctx,
-                              [=]() { callback(make_error_code(boost::system::errc::io_error)); });
-            return;
-        }
 
         auto be = boost::system::error_code{};
         auto se = std::error_code{};
@@ -103,11 +96,15 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
             std::cerr << "[youtube-dl source] error waiting for process: " << se.message() << "\n";
 
         if (!notified) {
+            // TODO: add error codes
+            boost::asio::post(ctx,
+                              [=]() { callback(make_error_code(boost::system::errc::io_error)); });
             notified = true;
-            boost::asio::post(ctx, [=]() { callback({}); });
+            return;
         }
     } else {
         std::cerr << "[youtube-dl source] pipe read error: " << e.message() << "\n";
         boost::asio::post(ctx, [=]() { callback(e); });
+        notified = true;
     }
 }

@@ -159,7 +159,7 @@ void discord::rtp_session::send(opus_frame frame)
         return;
     }
 
-    sock.async_send(boost::asio::buffer(buf, encrypted_len), print_rtp_send_info);
+    sock.async_send(boost::asio::buffer(buf, encrypted_len), ignore_transfer);
 }
 
 void discord::rtp_session::set_ssrc(uint32_t ssrc)
