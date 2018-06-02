@@ -12,12 +12,14 @@ extern "C" {
 #include <libswresample/swresample.h>
 }
 
+class audio_decoder;
+
 struct buffer_data {
     std::vector<uint8_t> &data;
     size_t loc;
 };
 
-struct av_frame {
+struct audio_frame {
     AVFrame *data;
     bool eof;
 };
@@ -43,8 +45,6 @@ private:
     friend class audio_decoder;
 };
 
-class audio_decoder;
-
 template<typename T, AVSampleFormat format, int sample_rate, int channels>
 class audio_resampler
 {
@@ -58,7 +58,8 @@ private:
 public:
     audio_resampler(audio_decoder &decoder);
     ~audio_resampler();
-    audio_samples<T> resample(av_frame frame);
+    void feed(audio_frame *frame);
+    audio_samples<T> read(int samples);
     int delayed_samples();
 };
 
@@ -70,28 +71,32 @@ class audio_decoder
 public:
     audio_decoder();
     ~audio_decoder();
-    int read();
-    int feed(bool flush);
-    int decode();
-    av_frame next_frame();  // Get next frame from the audio stream
     void open_input(avio_info &av);
     void find_stream_info();
     void find_best_stream();
     void open_decoder();
+    audio_frame next_frame();  // Get next frame from the audio stream
 
 private:
-    AVPacket packet;
+    friend float_resampler;
+    friend s16_resampler;
+
     AVFormatContext *format_context;  // Demuxer interface
     AVCodecContext *decoder_context;  // Decoder interface
     AVCodec *decoder;
     AVFrame *frame;
-    int stream_index;  // Audio stream in format_context
+    AVPacket packet;
+    int stream_index;
     bool do_read;
     bool do_feed;
+    bool do_output;
+    bool flushed;
     bool eof;
 
-    friend float_resampler;
-    friend s16_resampler;
+    void read_packet();
+    void feed_decoder();
+    void flush_decoder();
+    void decode_frame();
 };
 
 template<typename T, AVSampleFormat format, int sample_rate, int channels>
@@ -105,14 +110,16 @@ public:
     int available();
     bool ready();
     bool done();
+    void check_stream();
 
 private:
     using resampler_type = audio_resampler<T, format, sample_rate, channels>;
 
-    std::unique_ptr<avio_info> avio;
-    std::unique_ptr<audio_decoder> decoder;
-    std::unique_ptr<resampler_type> resampler;
     std::vector<uint8_t> input_buffer;
+
+    avio_info avio;
+    audio_decoder decoder;
+    std::unique_ptr<resampler_type> resampler;
 
     enum class decoder_state {
         start,
@@ -123,8 +130,6 @@ private:
         ready,
         eof
     } state;
-
-    void check_stream();
 };
 
 #endif

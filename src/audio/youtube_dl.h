@@ -30,6 +30,7 @@ private:
 
     float_audio_decoder decoder;
     std::array<uint8_t, 8192> buffer;
+    int bytes_sent_to_decoder;
 
     error_cb callback;
     const std::string &url;

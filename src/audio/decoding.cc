@@ -12,8 +12,10 @@ static int read_packet(void *opaque, uint8_t *buf, int buf_size)
 {
     assert(opaque);
     auto bd = reinterpret_cast<buffer_data *>(opaque);
+#if 0
     std::cout << "read_packet " << buf_size << " buffered=" << bd->data.size() << " loc=" << bd->loc
               << "\n";
+#endif
     buf_size = std::min<int>(buf_size, bd->data.size() - bd->loc);
     if (buf_size < 0)
         return 0;
@@ -72,14 +74,31 @@ audio_decoder::audio_decoder()
     : format_context{nullptr}
     , decoder_context{nullptr}
     , decoder{nullptr}
-    , frame{nullptr}
+    , frame{av_frame_alloc()}
     , stream_index{-1}
     , do_read{true}
     , do_feed{true}
+    , do_output{true}
+    , flushed{false}
+    , eof{false}
 {
-    frame = av_frame_alloc();
     if (!frame)
         throw std::runtime_error{"Unable to allocate audio frame"};
+}
+
+audio_decoder::~audio_decoder()
+{
+    if (format_context) {
+        avformat_close_input(&format_context);
+        avformat_free_context(format_context);
+    }
+    if (decoder_context) {
+        avcodec_close(decoder_context);
+        avcodec_free_context(&decoder_context);
+    }
+    if (frame)
+        av_frame_free(&frame);
+    av_packet_unref(&packet);
 }
 
 void audio_decoder::open_input(avio_info &av)
@@ -101,15 +120,14 @@ void audio_decoder::find_stream_info()
 {
     // Some format do not have header, or do not store enough information there so try to read
     // and decode a few frames if necessary to find missing information
-    if( avformat_find_stream_info(format_context, nullptr) < 0)
+    if (avformat_find_stream_info(format_context, nullptr) < 0)
         throw std::runtime_error{"avformat failed to find stream info"};
 }
 
 void audio_decoder::find_best_stream()
 {
     // Get best audio stream from format_context, and possibly decoder for this stream
-    stream_index =
-               av_find_best_stream(format_context, AVMEDIA_TYPE_AUDIO, -1, -1, &decoder, 0);
+    stream_index = av_find_best_stream(format_context, AVMEDIA_TYPE_AUDIO, -1, -1, &decoder, 0);
     if (stream_index < 0)
         throw std::runtime_error{"failed to find best audio stream"};
 }
@@ -142,100 +160,115 @@ void audio_decoder::open_decoder()
         throw std::runtime_error{"Failed to open decoder for stream"};
 }
 
-audio_decoder::~audio_decoder()
+void audio_decoder::read_packet()
 {
-    av_frame_free(&frame);
-    if (decoder_context) {
-        avcodec_close(decoder_context);
-        avcodec_free_context(&decoder_context);
-    }
-    if (format_context) {
-        avformat_close_input(&format_context);
-        avformat_free_context(format_context);
-    }
-}
-
-int audio_decoder::read()
-{
-    auto ret = 0;
+    auto error = 0;
     av_init_packet(&packet);
-    // Grab the next packet for the audio stream we're interested in
-    while ((ret = av_read_frame(format_context, &packet)) >= 0) {
-        if (packet.stream_index != stream_index) {
+    while ((error = av_read_frame(format_context, &packet)) == 0) {
+        if (packet.stream_index != stream_index)
             av_packet_unref(&packet);
-        } else {
+        else {
+            std::cout << "[audio decoder] read packet " << packet.size << " bytes\n";
             break;
         }
     }
-    return ret;
+    if (error)
+        flush_decoder();
 }
 
-// Feed the decoder the next packet from the demuxer (format_context)
-int audio_decoder::feed(bool flush)
+// Feed the decoder the next packet from the demuxer
+void audio_decoder::feed_decoder()
 {
-    auto ret = 0;
-    if (flush) {
-        ret = avcodec_send_packet(decoder_context, nullptr);
-        do_read = false;
-    } else {
-        // Send the packet to the decoder
-        ret = avcodec_send_packet(decoder_context, &packet);
-        eof = false;
-    }
+    assert(!flushed);
 
-    if (ret == AVERROR(EAGAIN)) {
-        // Decoder denied input. Output must be read
-        do_read = false;
-        do_feed = false;
-    } else if (ret == AVERROR_EOF) {
-        // Decoder has been flushed. No new packets can be sent
-        do_feed = false;
-    } else if (ret == AVERROR(EINVAL)) {
-        // Decoder is not opened
-        throw std::runtime_error{"Attempted to use an unopened decoder"};
-    } else if (ret == AVERROR(ENOMEM)) {
-        throw std::runtime_error{"Decoder failed to add packet to internal queue: no memory"};
-    } else {
-        av_packet_unref(&packet);
-        do_feed = true;
+    auto ret = avcodec_send_packet(decoder_context, &packet);
+    switch (ret) {
+        case 0:
+            // successfully sent packet to decoder
+            av_packet_unref(&packet);
+            std::cout << "[audio decoder] fed packet\n";
+            break;
+        case AVERROR_EOF:
+            // Decoder has been flushed. No new packets can be sent
+            std::cout << "[audio decoder] denied input: flushed\n";
+            // eof = true;
+            // fall through
+        case AVERROR(EAGAIN):
+            // Decoder denied input. Output must be read using next_frame()
+            do_read = false;
+            do_feed = false;
+            do_output = true;
+            std::cout << "[audio decoder] denied input: output must be read\n";
+            break;
+        case AVERROR(EINVAL):
+            // decoder was unopened, or decoder needs to be flushed
+            flush_decoder();
+        case AVERROR(ENOMEM):
+            throw std::runtime_error{"Decoder failed to add packet to internal queue: no memory"};
     }
-    return ret;
 }
 
-int audio_decoder::decode()
+void audio_decoder::flush_decoder()
 {
-    if (!frame)
-        return AVERROR_EOF;
+    assert(!flushed);
+
+    do_feed = false;
+    do_read = false;
+    flushed = true;
+    do_output = true;
+
+    auto ret = avcodec_send_packet(decoder_context, nullptr);
+    if (ret == 0)
+        std::cout << "[audio decoder] flush: success\n";
+    else if (ret == AVERROR_EOF)
+        std::cout << "[audio decoder] flush: decoder already flushed\n";
+    else if (ret == AVERROR(EAGAIN))
+        std::cout << "[audio decoder] flush: EAGAIN\n";
+}
+
+void audio_decoder::decode_frame()
+{
+    assert(frame);
 
     // Retrieve (decoded) frame from decoder
-    auto ret = avcodec_receive_frame(decoder_context, frame);
-
-    if (ret == AVERROR(EAGAIN)) {
-        // Error receiving frame from decoder
-    } else if (ret == AVERROR_EOF) {
-        // Decoder is fully flushed. No more output frames
-        eof = true;
-    } else if (ret == AVERROR(EINVAL)) {
-        throw std::runtime_error{"Attempted to use an unopened decoder"};
+    switch (avcodec_receive_frame(decoder_context, frame)) {
+        case 0:
+            do_output = true;
+            do_read = false;
+            do_feed = false;
+            std::cout << "[audio decoder] received frame: " << frame->nb_samples << " samples\n";
+            break;
+        case AVERROR(EAGAIN):
+            // Error receiving frame from decoder, needs input
+            do_read = true;
+            do_feed = true;
+            std::cout << "[audio decoder] needs input\n";
+            break;
+        case AVERROR_EOF:
+            // Decoder is fully flushed. No more output frames
+            std::cout << "[audio decoder] fully flushed. EOF\n";
+            eof = true;
+            do_output = false;
+            if (frame)
+                av_frame_free(&frame);
+            break;
+        case AVERROR(EINVAL):
+            throw std::runtime_error{"Attempted to use an unopened decoder"};
     }
-    return ret;
 }
 
-av_frame audio_decoder::next_frame()
+audio_frame audio_decoder::next_frame()
 {
-    auto ret = 0;
     if (do_read)
-        ret = read();
-    if (ret || do_feed)
-        feed(ret != 0);
+        read_packet();
 
-    ret = decode();
-    if (ret == AVERROR(EAGAIN))
-        return next_frame();
-    if (ret == AVERROR_EOF && !do_feed && !do_read) {
-        if (frame)
-            av_frame_free(&frame);
-        frame = nullptr;
+    if (do_feed)
+        feed_decoder();
+
+    if (do_output) {
+        decode_frame();
+        if (do_read && do_feed)
+            return next_frame();
     }
     return {frame, eof};
 }
@@ -268,7 +301,7 @@ audio_resampler<T, format, sample_rate, channels>::audio_resampler(audio_decoder
     grow(current_alloc);
 }
 
-template <typename T, AVSampleFormat format, int sample_rate, int channels>
+template<typename T, AVSampleFormat format, int sample_rate, int channels>
 audio_resampler<T, format, sample_rate, channels>::~audio_resampler()
 {
     if (swr)
@@ -277,7 +310,7 @@ audio_resampler<T, format, sample_rate, channels>::~audio_resampler()
         av_free(frame_buf);
 }
 
-template <typename T, AVSampleFormat format, int sample_rate, int channels>
+template<typename T, AVSampleFormat format, int sample_rate, int channels>
 void audio_resampler<T, format, sample_rate, channels>::grow(int bytes_wanted)
 {
     while (bytes_wanted > current_alloc)
@@ -290,37 +323,44 @@ void audio_resampler<T, format, sample_rate, channels>::grow(int bytes_wanted)
 
     if (!frame_buf)
         throw std::runtime_error{"Could not allocate resample buffer"};
-
-    std::cout << "[audio resampler] buffer grew to hold " << current_alloc << "\n";
 }
 
-template <typename T, AVSampleFormat format, int sample_rate, int channels>
-audio_samples<T> audio_resampler<T, format, sample_rate, channels>::resample(av_frame frame)
+template<typename T, AVSampleFormat format, int sample_rate, int channels>
+void audio_resampler<T, format, sample_rate, channels>::feed(audio_frame *frame)
+{
+    assert(swr);
+
+    auto ret = 0;
+    if (frame && frame->data) {
+        ret = swr_convert(swr, nullptr, 0, const_cast<const uint8_t **>(frame->data->data),
+                          frame->data->nb_samples);
+    } else {
+        ret = swr_convert(swr, nullptr, 0, nullptr, 0);
+    }
+    if (ret)
+        std::cerr << "[audio resampler] error feeding input\n";
+}
+
+template<typename T, AVSampleFormat format, int sample_rate, int channels>
+audio_samples<T> audio_resampler<T, format, sample_rate, channels>::read(int samples)
 {
     assert(swr);
     assert(frame_buf);
-    auto frame_count = 0;
-    std::cout << "delay before=" << delayed_samples() << " ";
-    if (frame.data) {
-#if 0
-        auto estimated_output = swr_get_out_samples(swr, frame.data->nb_samples);
-        if (estimated_output < 0)
-            return {nullptr, 0};
-        if (estimated_output > current_alloc)
-            grow(estimated_output);
-#endif
-        frame_count =
-            swr_convert(swr, &frame_buf, current_alloc,
-                        const_cast<const uint8_t **>(frame.data->data), frame.data->nb_samples);
-    } else {
-        frame_count = swr_convert(swr, &frame_buf, current_alloc, nullptr, 0);
-    }
 
-    std::cout << "after=" << delayed_samples() << "\n";
+    if (samples > current_alloc)
+        grow(samples);
+
+    // we're not actually reading from frame_buf and writing to frame_buf, if we give nullptr for
+    // input with 0 in_count, the resampler will flush
+    auto frame_count =
+        swr_convert(swr, &frame_buf, samples, const_cast<const uint8_t **>(&frame_buf), 0);
+    if (frame_count < 0)
+        std::cerr << "[audio resampler] error reading output\n";
+
     return {reinterpret_cast<T *>(frame_buf), frame_count};
 }
 
-template <typename T, AVSampleFormat format, int sample_rate, int channels>
+template<typename T, AVSampleFormat format, int sample_rate, int channels>
 int audio_resampler<T, format, sample_rate, channels>::delayed_samples()
 {
     assert(swr);
@@ -329,9 +369,7 @@ int audio_resampler<T, format, sample_rate, channels>::delayed_samples()
 
 template<typename T, AVSampleFormat format, int sample_rate, int channels>
 simple_audio_decoder<T, format, sample_rate, channels>::simple_audio_decoder()
-    : avio{std::make_unique<avio_info>(input_buffer)}
-    , decoder{std::make_unique<audio_decoder>()}
-    , state{decoder_state::start}
+    : avio{input_buffer}, state{decoder_state::start}
 {
     static_assert(sample_rate > 0);
     static_assert(channels > 0);
@@ -342,8 +380,6 @@ void simple_audio_decoder<T, format, sample_rate, channels>::feed(const uint8_t 
 {
     if (data && bytes > 0) {
         input_buffer.insert(input_buffer.end(), data, data + bytes);
-        if (state != decoder_state::ready)
-            check_stream();
     }
 }
 
@@ -353,33 +389,34 @@ int simple_audio_decoder<T, format, sample_rate, channels>::read(T *data, int sa
     assert(data);
     assert(samples > 0);
 
-    auto audio = audio_samples<T>{};
-    if (state == decoder_state::eof) {
-        audio = resampler->resample({});
-    } else {
-        auto avf = decoder->next_frame();
+    if (state != decoder_state::eof) {
+        auto avf = decoder.next_frame();
         if (avf.data) {
-            audio = resampler->resample(avf);
+            resampler->feed(&avf);
         }
         if (avf.eof) {
             state = decoder_state::eof;
+            resampler->feed(nullptr);
         }
     }
 
+    auto audio = resampler->read(samples);
     if (audio.frame_count > 0) {
         auto start = audio.data;
         auto end = audio.data + audio.frame_count * channels;
-        //output_buffer.insert(output_buffer.end(), start, end);
         std::copy(start, end, data);
-        return audio.frame_count;
+
+        if (state != decoder_state::eof && audio.frame_count < samples) {
+            // try to read the remaining samples
+            return read(data + audio.frame_count * channels, samples - audio.frame_count);
+        }
     }
-    if (audio.frame_count == 0 && state == decoder_state::eof) {
+
+    if (audio.frame_count <= 0 && state == decoder_state::eof) {
         // decoder gave eof and resampler isn't giving more data... completely done
         input_buffer.clear();
     }
-    if (resampler->delayed_samples() > 0)
-        return read(data, samples);
-    return 0;
+    return audio.frame_count;
 }
 
 template<typename T, AVSampleFormat format, int sample_rate, int channels>
@@ -409,19 +446,19 @@ void simple_audio_decoder<T, format, sample_rate, channels>::check_stream()
         switch (state) {
             // yes, fall through
             case decoder_state::start:
-                decoder->open_input(*avio);
+                decoder.open_input(avio);
                 state = decoder_state::opened_input;
             case decoder_state::opened_input:
-                decoder->find_stream_info();
+                decoder.find_stream_info();
                 state = decoder_state::found_stream_info;
             case decoder_state::found_stream_info:
-                decoder->find_best_stream();
+                decoder.find_best_stream();
                 state = decoder_state::found_best_stream;
             case decoder_state::found_best_stream:
-                decoder->open_decoder();
+                decoder.open_decoder();
                 state = decoder_state::opened_decoder;
             case decoder_state::opened_decoder:
-                resampler = std::make_unique<resampler_type>(*decoder);
+                resampler = std::make_unique<resampler_type>(decoder);
                 state = decoder_state::ready;
             default:
                 break;

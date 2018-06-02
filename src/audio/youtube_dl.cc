@@ -57,6 +57,7 @@ void youtube_dl_source::make_process(const std::string &url)
     child = bp::child{"youtube-dl -f 250/251/249/171/172 -o - " + url,
                       bp::std_in<bp::null, bp::std_err> bp::null, bp::std_out > pipe};
     notified = false;
+    bytes_sent_to_decoder = 0;
 
     std::cout << "[youtube-dl source] created process for " << url << "\n";
     read_from_pipe({}, 0);
@@ -67,10 +68,14 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
     if (transferred > 0) {
         // Commit any transferred data to the audio_file_data vector
         decoder.feed(buffer.data(), transferred);
+        bytes_sent_to_decoder += transferred;
     }
-    if (!notified && decoder.ready()) {
-        notified = true;
-        boost::asio::post(ctx, [=]() { callback({}); });
+    if (!notified && (bytes_sent_to_decoder >= 32768 || e == boost::asio::error::eof)) {
+        decoder.check_stream();
+        if (decoder.ready()) {
+            notified = true;
+            boost::asio::post(ctx, [=]() { callback({}); });
+        }
     }
 
     if (!e) {
