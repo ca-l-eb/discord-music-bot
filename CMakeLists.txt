@@ -17,6 +17,7 @@ set(SOURCE_FILES
         src/audio/decoding.cc
         src/audio/opus_encoder.cc
         src/audio/youtube_dl.cc
+        src/audio/file_source.cc
         src/callbacks.cc
         src/discord.cc
         src/errors.cc
@@ -37,6 +38,7 @@ set(HEADER_FILES
         src/audio/opus_encoder.h
         src/audio/source.h
         src/audio/youtube_dl.h
+        src/audio/file_source.h
         src/callbacks.h
         src/discord.h
         src/errors.h

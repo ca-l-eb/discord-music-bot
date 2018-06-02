@@ -3,6 +3,7 @@
 #include <regex>
 #include <set>
 
+#include "audio/file_source.h"
 #include "audio/youtube_dl.h"
 #include "net/resource_parser.h"
 #include "voice/voice_state_listener.h"
@@ -309,6 +310,10 @@ void discord::voice_state_listener::next_audio_source(voice_gateway_entry &entry
     if (valid_youtube_dl_sources.count(parsed.host)) {
         entry.process->source =
             std::make_shared<youtube_dl_source>(ctx, entry.process->encoder, next, callback);
+        entry.process->source->prepare();
+    } else if (parsed.protocol == "file") {
+        entry.process->source =
+            std::make_shared<file_source>(ctx, entry.process->encoder, parsed.resource, callback);
         entry.process->source->prepare();
     }
 }
