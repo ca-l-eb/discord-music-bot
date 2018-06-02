@@ -12,10 +12,6 @@ static int read_packet(void *opaque, uint8_t *buf, int buf_size)
 {
     assert(opaque);
     auto bd = reinterpret_cast<buffer_data *>(opaque);
-#if 0
-    std::cout << "read_packet " << buf_size << " buffered=" << bd->data.size() << " loc=" << bd->loc
-              << "\n";
-#endif
     buf_size = std::min<int>(buf_size, bd->data.size() - bd->loc);
     if (buf_size < 0)
         return 0;
@@ -24,26 +20,20 @@ static int read_packet(void *opaque, uint8_t *buf, int buf_size)
     return buf_size;
 }
 
-#if 0
+#if 1
 static int64_t seek(void *opaque, int64_t offset, int whence)
 {
-    std::cout << "seek ";
     assert(opaque);
     auto bd = reinterpret_cast<buffer_data *>(opaque);
     switch (whence) {
         case SEEK_SET:
-            std::cout << "SEEK_SET " << offset << "\n";
             return bd->loc = offset;
         case SEEK_CUR:
-            std::cout << "SEEK_CUR " << offset << "\n";
             return bd->loc += offset;
         case SEEK_END:
-            std::cout << "SEEK_END " << offset << "\n";
             return bd->loc = bd->data.size() + offset;
         case AVSEEK_SIZE:
-            std::cout << "AVSEEK_SIZE " << offset << "\n";
             return bd->data.size();
-            //return -1;
     }
     return -1;
 }
@@ -59,7 +49,7 @@ avio_info::avio_info(std::vector<uint8_t> &audio_data) : audio_file_data{audio_d
     // Instead of using avformat_open_input and passing path, we're going to use AVIO
     // which allows us to point to an already allocated area of memory that contains the media
     avio_context = avio_alloc_context(avio_buf, avio_buf_len, 0, &audio_file_data, &read_packet,
-                                      nullptr, nullptr);
+                                      nullptr, &seek);
     if (!avio_context)
         throw std::runtime_error{"Could not allocate AVIO context"};
 }
@@ -167,10 +157,8 @@ void audio_decoder::read_packet()
     while ((error = av_read_frame(format_context, &packet)) == 0) {
         if (packet.stream_index != stream_index)
             av_packet_unref(&packet);
-        else {
-            std::cout << "[audio decoder] read packet " << packet.size << " bytes\n";
+        else
             break;
-        }
     }
     if (error)
         flush_decoder();
@@ -186,19 +174,15 @@ void audio_decoder::feed_decoder()
         case 0:
             // successfully sent packet to decoder
             av_packet_unref(&packet);
-            std::cout << "[audio decoder] fed packet\n";
             break;
         case AVERROR_EOF:
             // Decoder has been flushed. No new packets can be sent
-            std::cout << "[audio decoder] denied input: flushed\n";
-            // eof = true;
             // fall through
         case AVERROR(EAGAIN):
             // Decoder denied input. Output must be read using next_frame()
             do_read = false;
             do_feed = false;
             do_output = true;
-            std::cout << "[audio decoder] denied input: output must be read\n";
             break;
         case AVERROR(EINVAL):
             // decoder was unopened, or decoder needs to be flushed
@@ -217,36 +201,26 @@ void audio_decoder::flush_decoder()
     flushed = true;
     do_output = true;
 
-    auto ret = avcodec_send_packet(decoder_context, nullptr);
-    if (ret == 0)
-        std::cout << "[audio decoder] flush: success\n";
-    else if (ret == AVERROR_EOF)
-        std::cout << "[audio decoder] flush: decoder already flushed\n";
-    else if (ret == AVERROR(EAGAIN))
-        std::cout << "[audio decoder] flush: EAGAIN\n";
+    avcodec_send_packet(decoder_context, nullptr);
 }
 
 void audio_decoder::decode_frame()
 {
-    assert(frame);
-
     // Retrieve (decoded) frame from decoder
     switch (avcodec_receive_frame(decoder_context, frame)) {
         case 0:
+            assert(frame);
             do_output = true;
             do_read = false;
             do_feed = false;
-            std::cout << "[audio decoder] received frame: " << frame->nb_samples << " samples\n";
             break;
         case AVERROR(EAGAIN):
             // Error receiving frame from decoder, needs input
             do_read = true;
             do_feed = true;
-            std::cout << "[audio decoder] needs input\n";
             break;
         case AVERROR_EOF:
             // Decoder is fully flushed. No more output frames
-            std::cout << "[audio decoder] fully flushed. EOF\n";
             eof = true;
             do_output = false;
             if (frame)
@@ -267,20 +241,20 @@ audio_frame audio_decoder::next_frame()
 
     if (do_output) {
         decode_frame();
-        if (do_read && do_feed)
+        if (do_read && do_feed) {
             return next_frame();
+        }
     }
     return {frame, eof};
 }
 
 template<typename T, AVSampleFormat format, int sample_rate, int channels>
 audio_resampler<T, format, sample_rate, channels>::audio_resampler(audio_decoder &decoder)
-    : frame_buf{nullptr}, current_alloc{960}
+    : swr{swr_alloc()}, frame_buf{nullptr}, current_alloc{960}
 {
     static_assert(sample_rate > 0);
     static_assert(channels > 0);
 
-    swr = swr_alloc();
     if (!swr)
         throw std::runtime_error{"Could not allocate resampling context"};
 
@@ -408,7 +382,8 @@ int simple_audio_decoder<T, format, sample_rate, channels>::read(T *data, int sa
 
         if (state != decoder_state::eof && audio.frame_count < samples) {
             // try to read the remaining samples
-            return read(data + audio.frame_count * channels, samples - audio.frame_count);
+            return audio.frame_count +
+                   read(data + audio.frame_count * channels, samples - audio.frame_count);
         }
     }
 

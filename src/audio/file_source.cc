@@ -55,7 +55,11 @@ void file_source::prepare()
         read += ifs.gcount();
         decoder.feed(reinterpret_cast<uint8_t *>(buf.data()), ifs.gcount());
     }
-    // no error otherwise
-    boost::asio::post(ctx, [=]() { callback({}); });
+    decoder.check_stream();
+    if (decoder.ready())
+        boost::asio::post(ctx, [=]() { callback({}); });
+    else
+        boost::asio::post(ctx,
+                          [=]() { callback({make_error_code(boost::system::errc::io_error)}); });
     std::cout << "[file source] read " << read << " bytes\n";
 }

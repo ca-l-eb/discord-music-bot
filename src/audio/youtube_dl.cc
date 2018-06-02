@@ -70,14 +70,17 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
         decoder.feed(buffer.data(), transferred);
         bytes_sent_to_decoder += transferred;
     }
-    if (!notified && (bytes_sent_to_decoder >= 32768 || e == boost::asio::error::eof)) {
-        decoder.check_stream();
+#if 0
+    if (!notified) {
+        if (bytes_sent_to_decoder >= 256 * 1024) {
+            decoder.check_stream();
+        }
         if (decoder.ready()) {
             notified = true;
             boost::asio::post(ctx, [=]() { callback({}); });
         }
     }
-
+#endif
     if (!e) {
         auto pipe_read_cb = [weak = weak_from_this()](auto &ec, size_t transferred) {
             if (auto self = weak.lock())
@@ -99,17 +102,20 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
             std::cerr << "[youtube-dl source] error closing pipe: " << be.message() << "\n";
         if (se)
             std::cerr << "[youtube-dl source] error waiting for process: " << se.message() << "\n";
-
         if (!notified) {
-            // TODO: add error codes
-            boost::asio::post(ctx,
-                              [=]() { callback(make_error_code(boost::system::errc::io_error)); });
+            decoder.check_stream();
             notified = true;
-            return;
+            if (decoder.ready())
+                boost::asio::post(ctx, [=]() { callback({}); });
+            else
+                boost::asio::post(
+                    ctx, [=]() { callback(make_error_code(boost::system::errc::io_error)); });
         }
     } else {
         std::cerr << "[youtube-dl source] pipe read error: " << e.message() << "\n";
-        boost::asio::post(ctx, [=]() { callback(e); });
-        notified = true;
+        if (!notified) {
+            boost::asio::post(ctx, [=]() { callback(e); });
+            notified = true;
+        }
     }
 }
