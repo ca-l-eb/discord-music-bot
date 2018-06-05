@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.4)
 project(discord)
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -pedantic -Wextra -Wno-ignored-qualifiers")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-ignored-qualifiers -pedantic -pipe")
 
 add_subdirectory(test)
 
@@ -15,9 +15,10 @@ pkg_check_modules(FFMPEG REQUIRED libavutil libswresample libavcodec libavformat
 set(SOURCE_FILES
         src/api.cc
         src/audio/decoding.cc
-        src/audio/opus_encoder.cc
-        src/audio/youtube_dl.cc
         src/audio/file_source.cc
+        src/audio/opus_encoder.cc
+        src/audio/source.cc
+        src/audio/youtube_dl.cc
         src/callbacks.cc
         src/discord.cc
         src/errors.cc
@@ -35,10 +36,10 @@ set(HEADER_FILES
         src/aliases.h
         src/api.h
         src/audio/decoding.h
+        src/audio/file_source.h
         src/audio/opus_encoder.h
         src/audio/source.h
         src/audio/youtube_dl.h
-        src/audio/file_source.h
         src/callbacks.h
         src/discord.h
         src/errors.h

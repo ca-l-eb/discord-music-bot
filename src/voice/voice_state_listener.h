@@ -1,18 +1,19 @@
-#ifndef CMD_DISCORD_VOICE_STATE_LISTENER_H
-#define CMD_DISCORD_VOICE_STATE_LISTENER_H
+#ifndef DISCORD_VOICE_STATE_LISTENER_H
+#define DISCORD_VOICE_STATE_LISTENER_H
 
 #include <boost/asio/deadline_timer.hpp>
 #include <boost/asio/io_context.hpp>
-#include <boost/asio/ssl.hpp>
 #include <deque>
 #include <memory>
 
+#include "aliases.h"
 #include "audio/opus_encoder.h"
 #include "audio/source.h"
-#include "gateway.h"
+#include "discord.h"
 
 namespace discord
 {
+class gateway;
 class voice_gateway;
 
 struct music_process {

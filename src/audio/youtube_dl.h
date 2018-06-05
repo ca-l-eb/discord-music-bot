@@ -1,5 +1,5 @@
-#ifndef CMD_AUDIO_SOURCE_YOUTUBE_DL_H
-#define CMD_AUDIO_SOURCE_YOUTUBE_DL_H
+#ifndef AUDIO_SOURCE_YOUTUBE_DL_H
+#define AUDIO_SOURCE_YOUTUBE_DL_H
 
 #include <array>
 #include <boost/asio/io_context.hpp>

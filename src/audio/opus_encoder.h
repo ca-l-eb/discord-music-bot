@@ -1,5 +1,5 @@
-#ifndef CMD_DISCORD_OPUS_ENCODER_H
-#define CMD_DISCORD_OPUS_ENCODER_H
+#ifndef DISCORD_OPUS_ENCODER_H
+#define DISCORD_OPUS_ENCODER_H
 
 #include <cstdint>
 

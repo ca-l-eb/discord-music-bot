@@ -1,5 +1,5 @@
-#ifndef CMD_DISCORD_HEARTBEATER_H
-#define CMD_DISCORD_HEARTBEATER_H
+#ifndef DISCORD_HEARTBEATER_H
+#define DISCORD_HEARTBEATER_H
 
 #include <boost/asio/deadline_timer.hpp>
 #include <boost/asio/error.hpp>

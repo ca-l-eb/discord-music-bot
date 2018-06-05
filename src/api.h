@@ -1,5 +1,5 @@
-#ifndef CMD_DISCORD_API_H
-#define CMD_DISCORD_API_H
+#ifndef DISCORD_API_H
+#define DISCORD_API_H
 
 #include <chrono>
 #include <map>

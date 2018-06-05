@@ -1,5 +1,5 @@
-#ifndef CMD_DISCORD_H
-#define CMD_DISCORD_H
+#ifndef DISCORD_H
+#define DISCORD_H
 
 #include <set>
 #include <string>

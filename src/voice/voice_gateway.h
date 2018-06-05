@@ -1,5 +1,5 @@
-#ifndef CMD_DISCORD_VOICE_GATEWAY_H
-#define CMD_DISCORD_VOICE_GATEWAY_H
+#ifndef DISCORD_VOICE_GATEWAY_H
+#define DISCORD_VOICE_GATEWAY_H
 
 #include <boost/asio/io_context.hpp>
 #include <cstdint>

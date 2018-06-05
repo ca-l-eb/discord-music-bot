@@ -1,14 +1,20 @@
-#ifndef CMD_AUDIO_SOURCE_H
-#define CMD_AUDIO_SOURCE_H
+#ifndef AUDIO_SOURCE_H
+#define AUDIO_SOURCE_H
 
 #include <cstdint>
 #include <vector>
+
+#include "audio/decoding.h"
+#include "audio/opus_encoder.h"
 
 struct opus_frame {
     std::vector<uint8_t> data;
     int frame_count;
     bool end_of_source;
 };
+
+opus_frame next_frame(float_audio_decoder &decoder, discord::opus_encoder &encoder, uint8_t *buffer,
+                      size_t buf_size);
 
 struct audio_source {
     virtual ~audio_source() = default;

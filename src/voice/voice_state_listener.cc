@@ -5,8 +5,13 @@
 
 #include "audio/file_source.h"
 #include "audio/youtube_dl.h"
+#include "gateway.h"
 #include "net/resource_parser.h"
+#include "voice/voice_gateway.h"
 #include "voice/voice_state_listener.h"
+
+class youtube_dl_source;
+class file_source;
 
 static discord::guild *get_guild_from_channel(uint64_t channel_id, discord::gateway_store &store)
 {

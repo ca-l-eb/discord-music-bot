@@ -20,7 +20,7 @@ static int read_packet(void *opaque, uint8_t *buf, int buf_size)
     return buf_size;
 }
 
-#if 1
+#if 0
 static int64_t seek(void *opaque, int64_t offset, int whence)
 {
     assert(opaque);
@@ -39,7 +39,7 @@ static int64_t seek(void *opaque, int64_t offset, int whence)
 }
 #endif
 
-avio_info::avio_info(std::vector<uint8_t> &audio_data) : audio_file_data{audio_data, 0}
+avio_context::avio_context(std::vector<uint8_t> &audio_data) : audio_file_data{audio_data, 0}
 {
     avio_buf_len = 8192;
     avio_buf = reinterpret_cast<uint8_t *>(av_malloc(avio_buf_len));
@@ -48,16 +48,16 @@ avio_info::avio_info(std::vector<uint8_t> &audio_data) : audio_file_data{audio_d
 
     // Instead of using avformat_open_input and passing path, we're going to use AVIO
     // which allows us to point to an already allocated area of memory that contains the media
-    avio_context = avio_alloc_context(avio_buf, avio_buf_len, 0, &audio_file_data, &read_packet,
-                                      nullptr, &seek);
-    if (!avio_context)
+    avio_ctx = avio_alloc_context(avio_buf, avio_buf_len, 0, &audio_file_data, &read_packet,
+                                  nullptr, nullptr);
+    if (!avio_ctx)
         throw std::runtime_error{"Could not allocate AVIO context"};
 }
 
-avio_info::~avio_info()
+avio_context::~avio_context()
 {
-    av_free(avio_context->buffer);
-    av_free(avio_context);
+    av_free(avio_ctx->buffer);
+    av_free(avio_ctx);
 }
 
 audio_decoder::audio_decoder()
@@ -65,6 +65,7 @@ audio_decoder::audio_decoder()
     , decoder_context{nullptr}
     , decoder{nullptr}
     , frame{av_frame_alloc()}
+    , packet{}
     , stream_index{-1}
     , do_read{true}
     , do_feed{true}
@@ -88,17 +89,18 @@ audio_decoder::~audio_decoder()
     }
     if (frame)
         av_frame_free(&frame);
-    av_packet_unref(&packet);
+    if (packet.buf)
+        av_packet_unref(&packet);
 }
 
-void audio_decoder::open_input(avio_info &av)
+void audio_decoder::open_input(avio_context &av)
 {
     format_context = avformat_alloc_context();
     if (!format_context)
         throw std::runtime_error{"Could not allocate libavformat context"};
 
     // Use the AVIO context
-    format_context->pb = av.avio_context;
+    format_context->pb = av.avio_ctx;
 
     // Open the file, read the header, export information into format_context
     // Frees format_context on failure

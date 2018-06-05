@@ -1,5 +1,5 @@
-#ifndef CMD_CALLBACKS_H
-#define CMD_CALLBACKS_H
+#ifndef CALLBACKS_H
+#define CALLBACKS_H
 
 #include <boost/system/error_code.hpp>
 #include <functional>

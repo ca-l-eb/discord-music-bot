@@ -1,11 +1,7 @@
-#ifndef CMD_DISCORD_BOT_H
-#define CMD_DISCORD_BOT_H
+#ifndef DISCORD_GATEWAY_H
+#define DISCORD_GATEWAY_H
 
-#include <condition_variable>
-#include <iostream>
 #include <memory>
-#include <mutex>
-#include <thread>
 
 #include <boost/asio/io_context.hpp>
 #include <json.hpp>
@@ -16,7 +12,6 @@
 #include "gateway_store.h"
 #include "heartbeater.h"
 #include "net/connection.h"
-#include "voice/voice_gateway.h"
 
 namespace discord
 {

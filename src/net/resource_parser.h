@@ -1,5 +1,5 @@
-#ifndef CMD_RESOURCE_PARSER_H
-#define CMD_RESOURCE_PARSER_H
+#ifndef RESOURCE_PARSER_H
+#define RESOURCE_PARSER_H
 
 #include <string>
 

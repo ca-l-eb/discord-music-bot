@@ -1,3 +1,6 @@
+#ifndef AUDIO_FILE_SOURCE_H
+#define AUDIO_FILE_SOURCE_H
+
 #include <boost/asio/io_context.hpp>
 #include <string>
 
@@ -25,3 +28,5 @@ private:
     float_audio_decoder decoder;
     std::array<uint8_t, 8192> buffer;
 };
+
+#endif

@@ -1,5 +1,5 @@
-#ifndef CMD_DECODING_H
-#define CMD_DECODING_H
+#ifndef DECODING_H
+#define DECODING_H
 
 #include <boost/circular_buffer.hpp>
 #include <vector>
@@ -30,14 +30,14 @@ struct audio_samples {
     int frame_count;
 };
 
-class avio_info
+class avio_context
 {
 public:
-    avio_info(std::vector<uint8_t> &audio_data);
-    ~avio_info();
+    avio_context(std::vector<uint8_t> &audio_data);
+    ~avio_context();
 
 private:
-    AVIOContext *avio_context;
+    AVIOContext *avio_ctx;
     uint8_t *avio_buf;
     buffer_data audio_file_data;
     size_t avio_buf_len;
@@ -71,7 +71,7 @@ class audio_decoder
 public:
     audio_decoder();
     ~audio_decoder();
-    void open_input(avio_info &av);
+    void open_input(avio_context &av);
     void find_stream_info();
     void find_best_stream();
     void open_decoder();
@@ -117,7 +117,7 @@ private:
 
     std::vector<uint8_t> input_buffer;
 
-    avio_info avio;
+    avio_context avio;
     audio_decoder decoder;
     std::unique_ptr<resampler_type> resampler;
 

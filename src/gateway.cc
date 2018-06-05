@@ -1,8 +1,8 @@
 #include <iostream>
-#include <memory>
 
 #include "errors.h"
 #include "gateway.h"
+#include "voice/voice_gateway.h"
 #include "voice/voice_state_listener.h"
 
 static void check_quit(discord::gateway *gateway, boost::asio::io_context &ctx,

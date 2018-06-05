@@ -1,5 +1,5 @@
-#ifndef CMD_DISCORD_CRYPTO_H
-#define CMD_DISCORD_CRYPTO_H
+#ifndef DISCORD_CRYPTO_H
+#define DISCORD_CRYPTO_H
 
 #include <sodium.h>
 #include <cstdint>

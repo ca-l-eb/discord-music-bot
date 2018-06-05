@@ -1,5 +1,5 @@
-#ifndef CMD_DISCORD_ERRORS_H
-#define CMD_DISCORD_ERRORS_H
+#ifndef DISCORD_ERRORS_H
+#define DISCORD_ERRORS_H
 
 #include <boost/system/error_code.hpp>
 #include <boost/type_traits/integral_constant.hpp>

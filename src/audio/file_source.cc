@@ -13,41 +13,18 @@ file_source::file_source(boost::asio::io_context &ctx, discord::opus_encoder &en
 
 opus_frame file_source::next()
 {
-    const auto channels = 2;
-    const auto frames_wanted = 960;
-    auto frame = opus_frame{};
-    auto buffer = reinterpret_cast<float *>(this->buffer.data());
-    auto read = decoder.read(buffer, frames_wanted);
-    if (read < frames_wanted) {
-        if (!decoder.done())
-            return {};
-
-        frame.end_of_source = true;
-
-        // Want to clear the remaining frames to 0
-        auto start = buffer + read * channels;
-        auto end = buffer + frames_wanted * channels;
-        std::fill(start, end, 0.0f);
-    }
-    if (read > 0) {
-        auto buf = std::array<uint8_t, 512>{};
-        auto encoded_len = encoder.encode(buffer, frames_wanted, buf.data(), buf.size());
-        if (encoded_len > 0) {
-            frame.data.reserve(encoded_len);
-            frame.data.insert(std::begin(frame.data), buf.data(), buf.data() + encoded_len);
-        }
-    }
-    frame.frame_count = frames_wanted;
-    return frame;
+    return next_frame(decoder, encoder, buffer.data(), buffer.size());
 }
 
 void file_source::prepare()
 {
     auto read = 0;
     auto ifs = std::ifstream{file_path};
+    auto error = boost::system::error_code{};
     if (!ifs) {
-        boost::asio::post(ctx,
-                          [=]() { callback({make_error_code(boost::system::errc::io_error)}); });
+        error = make_error_code(boost::system::errc::io_error);
+        boost::asio::post(ctx, [=]() { callback(error); });
+        return;
     }
     auto buf = std::array<char, 4096>{};
     while (ifs.good()) {
@@ -55,11 +32,10 @@ void file_source::prepare()
         read += ifs.gcount();
         decoder.feed(reinterpret_cast<uint8_t *>(buf.data()), ifs.gcount());
     }
-    decoder.check_stream();
-    if (decoder.ready())
-        boost::asio::post(ctx, [=]() { callback({}); });
-    else
-        boost::asio::post(ctx,
-                          [=]() { callback({make_error_code(boost::system::errc::io_error)}); });
     std::cout << "[file source] read " << read << " bytes\n";
+    decoder.check_stream();
+    if (!decoder.ready())
+        error = make_error_code(boost::system::errc::io_error);
+
+    boost::asio::post(ctx, [=]() { callback(error); });
 }
