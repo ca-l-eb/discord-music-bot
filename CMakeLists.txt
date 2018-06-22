@@ -25,8 +25,8 @@ set(SOURCE_FILES
         src/gateway.cc
         src/gateway_store.cc
         src/net/connection.cc
-        src/net/resource_parser.cc
         src/net/rtp.cc
+        src/net/uri.cc
         src/voice/crypto.cc
         src/voice/voice_gateway.cc
         src/voice/voice_state_listener.cc
@@ -47,8 +47,8 @@ set(HEADER_FILES
         src/gateway_store.h
         src/heartbeater.h
         src/net/connection.h
-        src/net/resource_parser.h
         src/net/rtp.h
+        src/net/uri.h
         src/voice/crypto.h
         src/voice/voice_gateway.h
         src/voice/voice_state_listener.h

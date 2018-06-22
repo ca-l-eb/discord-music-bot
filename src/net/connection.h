@@ -3,7 +3,7 @@
 
 #include "aliases.h"
 #include "callbacks.h"
-#include "net/resource_parser.h"
+#include "net/uri.h"
 
 namespace discord
 {
@@ -23,7 +23,7 @@ private:
     secure_websocket websock;
     boost::beast::multi_buffer buffer;
     error_cb connect_cb;
-    resource_parser::parsed_url info;
+    uri::parsed_uri info;
 
     void on_resolve(const boost::system::error_code &ec, tcp::resolver::iterator it);
     void on_connect(const boost::system::error_code &ec, tcp::resolver::iterator);

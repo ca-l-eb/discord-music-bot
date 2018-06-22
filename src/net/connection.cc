@@ -3,7 +3,6 @@
 
 #include "connection.h"
 #include "errors.h"
-#include "net/resource_parser.h"
 
 discord::connection::connection(boost::asio::io_context &io, ssl::context &tls)
     : ctx{io}, resolver{ctx}, websock{ctx, tls}
@@ -14,10 +13,10 @@ void discord::connection::connect(const std::string &url, error_cb c)
 {
     connect_cb = c;
 
-    info = resource_parser::parse(url);
+    info = uri::parse(url);
 
-    auto query = tcp::resolver::query{info.host, std::to_string(info.port)};
-    resolver.async_resolve(query, [this](auto &ec, auto it) { on_resolve(ec, it); });
+    auto query = tcp::resolver::query{info.authority, std::to_string(info.port)};
+    resolver.async_resolve(query, [this](const auto &ec, auto it) { on_resolve(ec, it); });
 }
 
 void discord::connection::disconnect()
@@ -29,7 +28,7 @@ void discord::connection::disconnect()
 
 void discord::connection::read(json_cb c)
 {
-    websock.async_read(buffer, [c, this](auto &ec, auto transferred) {
+    websock.async_read(buffer, [c, this](const auto &ec, auto transferred) {
         auto json = nlohmann::json{};
         if (!ec) {
             auto data = boost::beast::buffers_to_string(buffer.data());
@@ -55,7 +54,7 @@ void discord::connection::on_resolve(const boost::system::error_code &ec,
         connect_cb(ec);
     } else {
         boost::asio::async_connect(websock.next_layer().next_layer(), it,
-                                   [this](auto &ec, auto it) { on_connect(ec, it); });
+                                   [this](const auto &ec, auto it) { on_connect(ec, it); });
     }
 }
 
@@ -65,9 +64,9 @@ void discord::connection::on_connect(const boost::system::error_code &ec, tcp::r
         connect_cb(ec);
     } else {
         websock.next_layer().set_verify_mode(ssl::verify_peer);
-        websock.next_layer().set_verify_callback(ssl::rfc2818_verification(info.host));
+        websock.next_layer().set_verify_callback(ssl::rfc2818_verification(info.authority));
         websock.next_layer().async_handshake(ssl::stream_base::client,
-                                             [this](auto &ec) { on_tls_handshake(ec); });
+                                             [this](const auto &ec) { on_tls_handshake(ec); });
     }
 }
 
@@ -76,8 +75,8 @@ void discord::connection::on_tls_handshake(const boost::system::error_code &ec)
     if (ec) {
         connect_cb(ec);
     } else {
-        websock.async_handshake(info.host, info.resource,
-                                [this](auto &ec) { on_websocket_handshake(ec); });
+        websock.async_handshake(info.authority, info.path,
+                                [this](const auto &ec) { on_websocket_handshake(ec); });
     }
 }
 

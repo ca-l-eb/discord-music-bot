@@ -4,7 +4,7 @@
 
 #include "discord.h"
 #include "errors.h"
-#include "net/resource_parser.h"
+#include "net/uri.h"
 #include "voice/voice_gateway.h"
 #include "voice/voice_state_listener.h"
 
@@ -28,8 +28,8 @@ void discord::voice_gateway::connect(error_cb c)
     voice_connect_callback = c;
 
     // entry->endpoint contains both hostname and (bogus) port, only care about hostname
-    auto parsed = resource_parser::parse(entry->endpoint);
-    entry->endpoint = std::move(parsed.host);
+    auto parsed = uri::parse(entry->endpoint);
+    entry->endpoint = std::move(parsed.authority);
 
     conn.connect("wss://" + entry->endpoint + "/?v=3", [weak = weak_from_this()](auto &ec) {
         if (auto self = weak.lock()) {

@@ -6,7 +6,7 @@
 #include "audio/file_source.h"
 #include "audio/youtube_dl.h"
 #include "gateway.h"
-#include "net/resource_parser.h"
+#include "net/uri.h"
 #include "voice/voice_gateway.h"
 #include "voice/voice_state_listener.h"
 
@@ -304,21 +304,21 @@ void discord::voice_state_listener::next_audio_source(voice_gateway_entry &entry
         send_audio(entry);
     };
 
-    auto parsed = resource_parser::parse(next);
-    if (parsed.host.empty()) {
+    auto parsed = uri::parse(next);
+    if (parsed.authority.empty()) {
         std::cerr << "[voice state] invalid audio source\n";
         return;
     }
     static auto valid_youtube_dl_sources =
         std::set<std::string>{"youtube.com", "youtu.be", "www.youtube.com"};
 
-    if (valid_youtube_dl_sources.count(parsed.host)) {
+    if (valid_youtube_dl_sources.count(parsed.authority)) {
         entry.process->source =
             std::make_shared<youtube_dl_source>(ctx, entry.process->encoder, next, callback);
         entry.process->source->prepare();
-    } else if (parsed.protocol == "file") {
+    } else if (parsed.scheme == "file") {
         entry.process->source =
-            std::make_shared<file_source>(ctx, entry.process->encoder, parsed.resource, callback);
+            std::make_shared<file_source>(ctx, entry.process->encoder, parsed.path, callback);
         entry.process->source->prepare();
     }
 }
