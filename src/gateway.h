@@ -29,7 +29,7 @@ public:
     const std::string &get_session_id() const;
     discord::gateway_store &get_gateway_store();
 
-    using discord_event_cb = std::function<void(nlohmann::json &)>;
+    using discord_event_cb = std::function<void(const nlohmann::json &)>;
 
 private:
     discord::connection &conn;
@@ -50,7 +50,7 @@ private:
     void on_ready(const nlohmann::json &data);
     void next_event();
     void handle_event(const nlohmann::json &j);
-    void run_gateway_dispatch(nlohmann::json &data, const std::string &event_name);
+    void run_gateway_dispatch(const nlohmann::json &data, const std::string &event_name);
 };
 }  // namespace discord
 

@@ -97,7 +97,7 @@ void discord::voice_state_listener::on_voice_server_update(const nlohmann::json 
     entry->token = std::move(vsu.token);
     entry->endpoint = std::move(vsu.endpoint);
 
-    auto gateway_connect_cb = [weak = weak_from_this(), &entry](auto &ec) {
+    auto gateway_connect_cb = [weak = weak_from_this(), &entry](const auto &ec) {
         if (auto self = weak.lock()) {
             if (ec) {
                 std::cerr << "[voice state] voice gateway connection error: " << ec.message()
@@ -295,7 +295,7 @@ void discord::voice_state_listener::next_audio_source(voice_gateway_entry &entry
     auto next = std::move(entry.music_queue.front());
     entry.music_queue.pop_front();
 
-    auto callback = [&](auto &ec) {
+    auto callback = [&](const auto &ec) {
         if (ec) {
             std::cerr << "[voice state] error making audio source: " << ec.message() << "\n";
             return;
@@ -334,7 +334,7 @@ void discord::voice_state_listener::send_audio(voice_gateway_entry &entry)
     auto end = std::chrono::high_resolution_clock::now();
     auto time_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
-    auto timer_done_cb = [weak = weak_from_this(), &entry](auto &ec) {
+    auto timer_done_cb = [weak = weak_from_this(), &entry](const auto &ec) {
         if (auto self = weak.lock()) {
             if (!ec && entry.p_state == voice_gateway_entry::state::playing) {
                 self->send_audio(entry);

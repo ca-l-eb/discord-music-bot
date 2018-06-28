@@ -132,7 +132,7 @@ private:
     } state;
 };
 
-#endif
-
 using float_audio_decoder = simple_audio_decoder<float, AV_SAMPLE_FMT_FLT, 48000, 2>;
 using s16_audio_decoder = simple_audio_decoder<int16_t, AV_SAMPLE_FMT_S16, 48000, 2>;
+
+#endif

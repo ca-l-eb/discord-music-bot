@@ -31,7 +31,7 @@ void discord::voice_gateway::connect(error_cb c)
     auto parsed = uri::parse(entry->endpoint);
     entry->endpoint = std::move(parsed.authority);
 
-    conn.connect("wss://" + entry->endpoint + "/?v=3", [weak = weak_from_this()](auto &ec) {
+    conn.connect("wss://" + entry->endpoint + "/?v=3", [weak = weak_from_this()](const auto &ec) {
         if (auto self = weak.lock()) {
             if (ec) {
                 std::cerr << "[voice] websocket connect error: " << ec.message() << "\n";
@@ -59,7 +59,7 @@ void discord::voice_gateway::identify()
                                      {"user_id", user_id},
                                      {"session_id", entry->session_id},
                                      {"token", entry->token}}}};
-    auto identify_sent_cb = [&](auto &ec, auto) {
+    auto identify_sent_cb = [&](const auto &ec, auto) {
         if (ec) {
             std::cout << "[voice] gateway identify error: " << ec.message() << "\n";
             boost::asio::post(ctx, [&]() { voice_connect_callback(ec); });
@@ -79,7 +79,7 @@ void discord::voice_gateway::send(const std::string &s, transfer_cb c)
 void discord::voice_gateway::next_event()
 {
     if (state == connection_state::connected)
-        conn.read([weak = weak_from_this()](auto &ec, auto &json) {
+        conn.read([weak = weak_from_this()](const auto &ec, auto &json) {
             if (ec) {
                 std::cerr << "[voice] error: " << ec.message() << "\n";
                 return;
@@ -139,12 +139,12 @@ void discord::voice_gateway::extract_ready_info(nlohmann::json &data)
     auto ready_info = data.get<discord::voice_ready>();
     rtp.set_ssrc(ready_info.ssrc);
 
-    auto connect_cb = [weak = weak_from_this()](auto &ec) {
+    auto connect_cb = [weak = weak_from_this()](const auto &ec) {
         if (auto self = weak.lock()) {
             if (ec) {
                 boost::asio::post(self->ctx, [=]() { self->voice_connect_callback(ec); });
             } else {
-                self->rtp.ip_discovery([weak](auto &ecc) {
+                self->rtp.ip_discovery([weak](const auto &ecc) {
                     if (auto self = weak.lock()) {
                         if (ecc) {
                             self->voice_connect_callback(ecc);
@@ -231,30 +231,25 @@ void discord::voice_gateway::stop_speaking(transfer_cb c)
     do_speak(this, c, false);
 }
 
-void discord::voice_gateway::play(opus_frame frame)
+void discord::voice_gateway::play(const opus_frame &frame)
 {
     if (!is_speaking) {
-        auto speak_sent_cb = [=](auto &ec, auto) {
+        auto speak_sent_cb = [=](const auto &ec, auto) {
             if (!ec) {
-                std::cout << "[voice] now speaking\n";
+                std::cout << "[voice] now speaking in " << entry->channel_id << "\n";
                 is_speaking = true;
-                send_audio(frame);
+                rtp.send(frame);
             }
         };
         start_speaking(speak_sent_cb);
     } else {
-        send_audio(frame);
+        rtp.send(frame);
     }
 }
 
 void discord::voice_gateway::stop()
 {
     is_speaking = false;
-    std::cout << "[voice] stopped speaking\n";
+    std::cout << "[voice] stopped speaking in " << entry->channel_id << "\n";
     stop_speaking(ignore_transfer);
-}
-
-void discord::voice_gateway::send_audio(opus_frame frame)
-{
-    rtp.send(frame);
 }

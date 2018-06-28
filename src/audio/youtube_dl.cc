@@ -56,7 +56,7 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
     }
 #endif
     if (!e) {
-        auto pipe_read_cb = [weak = weak_from_this()](auto &ec, size_t transferred) {
+        auto pipe_read_cb = [weak = weak_from_this()](const auto &ec, size_t transferred) {
             if (auto self = weak.lock())
                 self->read_from_pipe(ec, transferred);
         };

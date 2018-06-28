@@ -6,10 +6,10 @@
 #include "voice/voice_state_listener.h"
 
 static void check_quit(discord::gateway *gateway, boost::asio::io_context &ctx,
-                       nlohmann::json &json)
+                       const nlohmann::json &json)
 {
     const auto my_user_id = 112721982570713088;
-    auto message = json.get<discord::message>();
+    const auto message = json.get<discord::message>();
     if (message.author.id == my_user_id) {
         if (message.content == ":q" || message.content == ":quit") {
             std::cout << "[gateway] disconnecting...\n";
@@ -24,28 +24,33 @@ discord::gateway::gateway(boost::asio::io_context &ctx, ssl::context &tls, const
                           discord::connection &c)
     : conn{c}, beater{ctx}, token{token}, state{connection_state::disconnected}
 {
-    event_to_handler.emplace("READY", [&](auto &json) { on_ready(json); });
-    event_to_handler.emplace("GUILD_CREATE", [&](auto &json) { store.guild_create(json); });
-    event_to_handler.emplace("CHANNEL_CREATE", [&](auto &json) { store.channel_create(json); });
-    event_to_handler.emplace("CHANNEL_UPDATE", [&](auto &json) { store.channel_update(json); });
-    event_to_handler.emplace("CHANNEL_DELETE", [&](auto &json) { store.channel_delete(json); });
-    event_to_handler.emplace("RESUME", [&](auto &) { state = connection_state::connected; });
+    event_to_handler.emplace("READY", [&](const auto &json) { on_ready(json); });
+    event_to_handler.emplace("GUILD_CREATE", [&](const auto &json) { store.guild_create(json); });
+    event_to_handler.emplace("CHANNEL_CREATE",
+                             [&](const auto &json) { store.channel_create(json); });
+
+    event_to_handler.emplace("CHANNEL_UPDATE",
+                             [&](const auto &json) { store.channel_update(json); });
+    event_to_handler.emplace("CHANNEL_DELETE",
+                             [&](const auto &json) { store.channel_delete(json); });
+    event_to_handler.emplace("RESUME", [&](const auto &) { state = connection_state::connected; });
 
     auto handler = std::make_shared<voice_state_listener>(ctx, tls, *this);
     event_to_handler.emplace("VOICE_STATE_UPDATE",
-                             [handler](auto &json) { handler->on_voice_state_update(json); });
-    event_to_handler.emplace("VOICE_SERVER_UPDATE",
-                             [handler](auto &json) { handler->on_voice_server_update(json); });
+                             [handler](const auto &json) { handler->on_voice_state_update(json); });
+    event_to_handler.emplace("VOICE_SERVER_UPDATE", [handler](const auto &json) {
+        handler->on_voice_server_update(json);
+    });
     event_to_handler.emplace("MESSAGE_CREATE",
-                             [handler](auto &json) { handler->on_message_create(json); });
+                             [handler](const auto &json) { handler->on_message_create(json); });
     event_to_handler.emplace("MESSAGE_CREATE",
-                             [this, &ctx](auto &json) { check_quit(this, ctx, json); });
+                             [this, &ctx](const auto &json) { check_quit(this, ctx, json); });
 }
 
 void discord::gateway::run()
 {
     conn.connect("wss://gateway.discord.gg/?v=6&encoding=json",
-                 [weak = weak_from_this()](auto &ec) {
+                 [weak = weak_from_this()](const auto &ec) {
                      if (auto self = weak.lock()) {
                          if (ec) {
                              throw std::runtime_error{"Could not connect: " + ec.message()};
@@ -95,7 +100,7 @@ void discord::gateway::identify()
           {"compress", false},
           {"large_threshold", 250}}}};
 
-    auto callback = [weak = weak_from_this()](auto &ec, size_t) {
+    auto callback = [weak = weak_from_this()](const auto &ec, size_t) {
         if (auto self = weak.lock()) {
             if (ec) {
                 std::cerr << "[gateway] identify send error: " << ec.message() << "\n";
@@ -146,7 +151,7 @@ void discord::gateway::next_event()
 {
     // Asynchronously read next message, on message received send it to listeners
     if (state != connection_state::disconnected)
-        conn.read([weak = weak_from_this()](auto &ec, auto &json) {
+        conn.read([weak = weak_from_this()](const auto &ec, auto &json) {
             if (ec) {
                 std::cerr << "[gateway] error: " << ec.message() << "\n";
                 return;
@@ -207,7 +212,8 @@ void discord::gateway::handle_event(const nlohmann::json &j)
     }
 }
 
-void discord::gateway::run_gateway_dispatch(nlohmann::json &data, const std::string &event_name)
+void discord::gateway::run_gateway_dispatch(const nlohmann::json &data,
+                                            const std::string &event_name)
 {
     using namespace std::string_literals;
     auto events = {event_name, "ALL"s};

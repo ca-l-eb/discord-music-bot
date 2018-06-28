@@ -254,8 +254,8 @@ template<typename T, AVSampleFormat format, int sample_rate, int channels>
 audio_resampler<T, format, sample_rate, channels>::audio_resampler(audio_decoder &decoder)
     : swr{swr_alloc()}, frame_buf{nullptr}, current_alloc{960}
 {
-    static_assert(sample_rate > 0);
-    static_assert(channels > 0);
+    static_assert(sample_rate > 0, "sample rate must be > 0");
+    static_assert(channels > 0, "channels must be > 0");
 
     if (!swr)
         throw std::runtime_error{"Could not allocate resampling context"};

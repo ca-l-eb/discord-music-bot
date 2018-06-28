@@ -28,7 +28,7 @@ public:
     void send(const std::string &s, transfer_cb c);
     void connect(error_cb c);
     void disconnect();
-    void play(opus_frame frame);
+    void play(const opus_frame &frame);
     void stop();
 
 private:

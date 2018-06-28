@@ -19,7 +19,7 @@ public:
     rtp_session(boost::asio::io_context &ctx);
     void connect(const std::string &host, const std::string &port, error_cb c);
     void ip_discovery(error_cb c);
-    void send(opus_frame frame);
+    void send(const opus_frame &frame);
     void set_ssrc(uint32_t ssrc);
     void set_secret_key(std::vector<uint8_t> key);
     const std::string &get_external_ip() const;

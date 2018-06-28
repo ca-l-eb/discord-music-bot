@@ -22,7 +22,7 @@ discord::rtp_session::rtp_session(boost::asio::io_context &ctx)
 void discord::rtp_session::connect(const std::string &host, const std::string &port, error_cb c)
 {
     auto query = udp::resolver::query{udp::v4(), host, port};
-    resolver.async_resolve(query, [=](auto &ec, auto it) {
+    resolver.async_resolve(query, [=](const auto &ec, auto it) {
         if (ec) {
             c(ec);  // host resolve error
         } else {
@@ -49,7 +49,7 @@ void discord::rtp_session::ip_discovery(error_cb c)
     // Let's try retry 5 times if we fail to receive response
     send_ip_discovery_datagram(5, c);
 
-    auto udp_recv_cb = [=](auto &ec, auto transferred) {
+    auto udp_recv_cb = [=](const auto &ec, auto transferred) {
         if (ec) {
             c(ec);
         } else if (transferred >= 70) {
@@ -74,7 +74,7 @@ void discord::rtp_session::ip_discovery(error_cb c)
 
 void discord::rtp_session::send_ip_discovery_datagram(int retries, error_cb c)
 {
-    auto udp_sent_cb = [=](auto &ec, auto) {
+    auto udp_sent_cb = [=](const auto &ec, auto) {
         if (ec && ec != boost::asio::error::operation_aborted) {
             std::cerr << "[RTP] could not send udp packet to voice server: " << ec.message()
                       << "\n";
@@ -89,7 +89,7 @@ void discord::rtp_session::send_ip_discovery_datagram(int retries, error_cb c)
         }
         // Next time expires in 200 ms
         timer.expires_from_now(boost::posix_time::milliseconds(200));
-        timer.async_wait([=](auto &ec) {
+        timer.async_wait([=](const auto &ec) {
             if (!ec)
                 send_ip_discovery_datagram(retries - 1, c);
         });
@@ -128,7 +128,7 @@ static void print_rtp_send_info(const boost::system::error_code &ec, size_t tran
     }
 }
 
-void discord::rtp_session::send(opus_frame frame)
+void discord::rtp_session::send(const opus_frame &frame)
 {
     auto size = frame.data.size();
     auto encrypted_len = size + 12 + crypto_secretbox_MACBYTES;
