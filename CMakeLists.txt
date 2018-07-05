@@ -8,7 +8,7 @@ add_subdirectory(test)
 
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
-find_package(Boost 1.4 COMPONENTS system REQUIRED)
+find_package(Boost 1.66 COMPONENTS system REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(FFMPEG REQUIRED libavutil libswresample libavcodec libavformat)
 

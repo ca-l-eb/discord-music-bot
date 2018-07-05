@@ -1,7 +1,7 @@
 #ifndef DISCORD_VOICE_STATE_LISTENER_H
 #define DISCORD_VOICE_STATE_LISTENER_H
 
-#include <boost/asio/deadline_timer.hpp>
+#include <boost/asio/high_resolution_timer.hpp>
 #include <boost/asio/io_context.hpp>
 #include <deque>
 #include <memory>
@@ -18,7 +18,7 @@ class voice_gateway;
 
 struct music_process {
     boost::asio::io_context &ctx;
-    boost::asio::deadline_timer timer;
+    boost::asio::high_resolution_timer timer;
     discord::opus_encoder encoder;
     std::shared_ptr<audio_source> source;
 

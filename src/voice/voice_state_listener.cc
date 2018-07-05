@@ -10,9 +10,6 @@
 #include "voice/voice_gateway.h"
 #include "voice/voice_state_listener.h"
 
-class youtube_dl_source;
-class file_source;
-
 static discord::guild *get_guild_from_channel(uint64_t channel_id, discord::gateway_store &store)
 {
     auto guild_id = store.lookup_channel(channel_id);
@@ -329,10 +326,16 @@ void discord::voice_state_listener::send_audio(voice_gateway_entry &entry)
     assert(entry.process->source);
     assert(entry.p_state == voice_gateway_entry::state::playing);
 
-    auto start = std::chrono::high_resolution_clock::now();
+    using namespace std::chrono;
+
+    static auto last_frame_time = high_resolution_clock::now();
+    static auto last_frame_size = 0;
+
+    auto start = high_resolution_clock::now();
     auto frame = entry.process->source->next();
-    auto end = std::chrono::high_resolution_clock::now();
-    auto time_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    auto retrieval_time_us =
+        duration_cast<microseconds>(high_resolution_clock::now() - start).count();
+    auto time_since_last_frame_us = duration_cast<microseconds>(start - last_frame_time).count();
 
     auto timer_done_cb = [weak = weak_from_this(), &entry](const auto &ec) {
         if (auto self = weak.lock()) {
@@ -348,15 +351,19 @@ void discord::voice_state_listener::send_audio(voice_gateway_entry &entry)
             std::cerr << "[voice state] invalid frame size: " << fc << "\n";
             return;
         }
+
+        auto expected_time_diff = last_frame_size * 1000 / 48;
+        auto time_offset = std::max<int64_t>(time_since_last_frame_us - expected_time_diff, 0);
+
         // Next timer expires after frame_size / 48000 seconds, or frame size / 48 ms
-        entry.process->timer.expires_from_now(
-            boost::posix_time::microseconds(((frame.frame_count * 1000) / 48) - time_us.count()));
+        auto expires_us = frame.frame_count * 1000 / 48 - retrieval_time_us - time_offset;
+        entry.process->timer.expires_after(microseconds(expires_us));
 
         // Play the frame
         entry.gateway->play(frame);
     } else if (!frame.end_of_source) {
         // Data from source not yet available... try again in a little
-        entry.process->timer.expires_from_now(boost::posix_time::microseconds(500));
+        entry.process->timer.expires_from_now(microseconds(500));
     }
     if (frame.end_of_source) {
         // Done with the current source, play next entry
@@ -365,5 +372,7 @@ void discord::voice_state_listener::send_audio(voice_gateway_entry &entry)
         entry.p_state = voice_gateway_entry::state::connected;
         play(entry);
     }
+    last_frame_size = frame.frame_count;
+    last_frame_time = start;
     entry.process->timer.async_wait(timer_done_cb);
 }
