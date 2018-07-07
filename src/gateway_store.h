@@ -18,6 +18,7 @@ public:
     void channel_create(const nlohmann::json &json);
     void channel_update(const nlohmann::json &json);
     void channel_delete(const nlohmann::json &json);
+    void voice_state_update(const nlohmann::json &json);
 
     // Returns the guild_id that the channel is in
     uint64_t lookup_channel(uint64_t channel_id);

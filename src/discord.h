@@ -66,11 +66,25 @@ struct member {
     member() = default;
 };
 
+struct voice_state {
+    uint64_t guild_id;  // server_id in docs
+    uint64_t channel_id;
+    uint64_t user_id;
+    std::string session_id;
+    bool deaf;
+    bool mute;
+    bool self_deaf;
+    bool self_mute;
+    bool suppress;
+    voice_state() = default;
+};
+
 struct guild {
     uint64_t id;
     uint64_t owner;
     std::set<channel> channels;
     std::set<member> members;
+    std::set<voice_state> voice_states;
     std::string name;
     std::string region;
     bool unavailable;
@@ -93,19 +107,6 @@ struct message {
         guild_member_join = 7
     } type;
     message() = default;
-};
-
-struct voice_state {
-    uint64_t guild_id;  // server_id in docs
-    uint64_t channel_id;
-    uint64_t user_id;
-    std::string session_id;
-    bool deaf;
-    bool mute;
-    bool self_deaf;
-    bool self_mute;
-    bool suppress;
-    voice_state() = default;
 };
 
 struct payload {
@@ -135,6 +136,7 @@ bool operator<(const discord::user &lhs, const discord::user &rhs);
 bool operator<(const discord::member &lhs, const discord::member &rhs);
 bool operator<(const discord::guild &lhs, const discord::guild &rhs);
 bool operator<(const discord::message &lhs, const discord::message &rhs);
+bool operator<(const discord::voice_state &lhs, const discord::voice_state &rhs);
 
 void from_json(const nlohmann::json &json, discord::channel &c);
 void from_json(const nlohmann::json &json, discord::user &u);

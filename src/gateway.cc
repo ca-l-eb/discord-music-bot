@@ -25,15 +25,18 @@ discord::gateway::gateway(boost::asio::io_context &ctx, ssl::context &tls, const
     : conn{c}, beater{ctx}, token{token}, state{connection_state::disconnected}
 {
     event_to_handler.emplace("READY", [&](const auto &json) { on_ready(json); });
+    event_to_handler.emplace("RESUME", [&](const auto &) { state = connection_state::connected; });
+
+    // gateway_store events
     event_to_handler.emplace("GUILD_CREATE", [&](const auto &json) { store.guild_create(json); });
     event_to_handler.emplace("CHANNEL_CREATE",
                              [&](const auto &json) { store.channel_create(json); });
-
     event_to_handler.emplace("CHANNEL_UPDATE",
                              [&](const auto &json) { store.channel_update(json); });
     event_to_handler.emplace("CHANNEL_DELETE",
                              [&](const auto &json) { store.channel_delete(json); });
-    event_to_handler.emplace("RESUME", [&](const auto &) { state = connection_state::connected; });
+    event_to_handler.emplace("VOICE_STATE_UPDATE",
+                             [&](const auto &json) { store.voice_state_update(json); });
 
     auto handler = std::make_shared<voice_state_listener>(ctx, tls, *this);
     event_to_handler.emplace("VOICE_STATE_UPDATE",

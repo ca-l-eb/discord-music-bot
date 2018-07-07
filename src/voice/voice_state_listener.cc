@@ -162,7 +162,8 @@ void discord::voice_state_listener::check_command(const discord::message &m)
     }
 }
 
-void discord::voice_state_listener::do_join(const discord::message &m, const std::string &s)
+void discord::voice_state_listener::do_join(const discord::message &m,
+                                            const std::string &channel_name)
 {
     auto *guild = get_guild_from_channel(m.channel_id, gateway.get_gateway_store());
     if (!guild)
@@ -171,14 +172,28 @@ void discord::voice_state_listener::do_join(const discord::message &m, const std
     auto it = voice_gateways.find(guild->id);
     auto connected = it != voice_gateways.end();
 
-    // Look through the guild's channels for channel s, if it exists, join, else fail silently
-    for (auto channel : guild->channels) {
-        if (channel.type == discord::channel::channel_type::guild_voice && channel.name == s) {
-            // Found a matching voice channel name! Join it if it is different
-            // than the currently connected channel (if any)
-            if (!connected || (it->second && it->second->channel_id != channel.id)) {
-                join_voice_server(guild->id, channel.id);
-                return;
+    // Check if the user sending the message is in a channel and join that channel
+    if (channel_name.empty()) {
+        auto find = discord::voice_state{};
+        find.user_id = m.author.id;
+        // Populate user_id field in voice_state so set::find gets correct entry
+        find.user_id = m.author.id;
+        if (const auto &user_voice_state = guild->voice_states.find(find);
+            user_voice_state != guild->voice_states.end()) {
+            join_voice_server(guild->id, user_voice_state->channel_id);
+        }
+
+    } else {
+        // Look through the guild's channels for channel s, if it exists, join, else fail silently
+        for (auto channel : guild->channels) {
+            if (channel.type == discord::channel::channel_type::guild_voice &&
+                channel.name == channel_name) {
+                // Found a matching voice channel name! Join it if it is different
+                // than the currently connected channel (if any)
+                if (!connected || (it->second && it->second->channel_id != channel.id)) {
+                    join_voice_server(guild->id, channel.id);
+                    return;
+                }
             }
         }
     }

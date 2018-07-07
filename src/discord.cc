@@ -60,6 +60,7 @@ void discord::from_json(const nlohmann::json &json, discord::guild &g)
     g.unavailable = json.at("unavailable").get<bool>();
     g.members = json.at("members").get<std::set<discord::member>>();
     g.channels = json.at("channels").get<std::set<discord::channel>>();
+    g.voice_states = get_safe<std::set<discord::voice_state>>(json, "voice_states", {});
 }
 
 bool discord::operator<(const discord::member &lhs, const discord::member &rhs)
@@ -100,6 +101,11 @@ void discord::from_json(const nlohmann::json &json, discord::message &m)
     m.author = json.at("author").get<discord::user>();
     m.content = json.at("content").get<std::string>();
     m.type = json.at("type").get<discord::message::message_type>();
+}
+
+bool discord::operator<(const discord::voice_state &lhs, const discord::voice_state &rhs)
+{
+    return lhs.user_id < rhs.user_id;
 }
 
 void discord::from_json(const nlohmann::json &json, discord::voice_state &v)

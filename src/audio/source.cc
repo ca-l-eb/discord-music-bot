@@ -1,6 +1,6 @@
+#include <array>
 #include <iostream>
 #include <stdexcept>
-#include <array>
 
 #include "audio/source.h"
 

@@ -61,6 +61,18 @@ void discord::gateway_store::channel_delete(const nlohmann::json &json)
     }
 }
 
+void discord::gateway_store::voice_state_update(const nlohmann::json &json)
+{
+    try {
+        auto vs = json.get<discord::voice_state>();
+        auto g = guilds[vs.guild_id].get();
+        g->voice_states.erase(vs);  // erase any existing voice state information
+        g->voice_states.insert(std::move(vs));
+    } catch (std::exception &e) {
+        std::cerr << "[gateway store] " << e.what() << "\n";
+    }
+}
+
 discord::guild *discord::gateway_store::get_guild(uint64_t guild_id)
 {
     auto it = guilds.find(guild_id);
