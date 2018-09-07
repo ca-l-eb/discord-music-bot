@@ -40,8 +40,8 @@ enum class voice_op {
 using snowflake = uint64_t;
 
 struct channel {
-    snowflake id;
-    snowflake guild_id;
+    discord::snowflake id;
+    discord::snowflake guild_id;
     int user_limit;
     int bitrate;
     enum class channel_type {
@@ -52,51 +52,46 @@ struct channel {
         guild_category = 4
     } type;
     std::string name;
-    channel() = default;
 };
 
 struct user {
-    snowflake id;
+    discord::snowflake id;
     std::string name;
     std::string discriminator;
-    user() = default;
 };
 
 struct member {
-    user user;
+    discord::user user;
     std::string nick;
-    member() = default;
 };
 
 struct voice_state {
-    snowflake guild_id;  // server_id in docs
-    snowflake channel_id;
-    snowflake user_id;
+    discord::snowflake guild_id;  // server_id in docs
+    discord::snowflake channel_id;
+    discord::snowflake user_id;
     std::string session_id;
     bool deaf;
     bool mute;
     bool self_deaf;
     bool self_mute;
     bool suppress;
-    voice_state() = default;
 };
 
 struct guild {
-    snowflake id;
-    snowflake owner;
+    discord::snowflake id;
+    discord::snowflake owner;
     std::set<channel> channels;
     std::set<member> members;
     std::set<voice_state> voice_states;
     std::string name;
     std::string region;
     bool unavailable;
-    guild() = default;
 };
 
 struct message {
-    snowflake id;
-    snowflake channel_id;
-    user author;
+    discord::snowflake id;
+    discord::snowflake channel_id;
+    discord::user author;
     std::string content;
     enum class message_type {
         default_ = 0,
@@ -108,11 +103,10 @@ struct message {
         channel_pinned_message = 6,
         guild_member_join = 7
     } type;
-    message() = default;
 };
 
 struct payload {
-    gateway_op op;
+    discord::gateway_op op;
     int sequence_num;
     std::string event_name;
     nlohmann::json data;
@@ -164,7 +158,7 @@ struct ready {
 };
 
 struct voice_server_update {
-    snowflake guild_id;
+    discord::snowflake guild_id;
     std::string token;
     std::string endpoint;
 };
