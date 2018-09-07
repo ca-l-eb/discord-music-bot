@@ -73,7 +73,7 @@ void discord::gateway_store::voice_state_update(const nlohmann::json &json)
     }
 }
 
-discord::guild *discord::gateway_store::get_guild(uint64_t guild_id)
+discord::guild *discord::gateway_store::get_guild(discord::snowflake guild_id)
 {
     auto it = guilds.find(guild_id);
     if (it != guilds.end())
@@ -81,7 +81,7 @@ discord::guild *discord::gateway_store::get_guild(uint64_t guild_id)
     return nullptr;
 }
 
-uint64_t discord::gateway_store::lookup_channel(uint64_t channel_id)
+discord::snowflake discord::gateway_store::lookup_channel(discord::snowflake channel_id)
 {
     auto it = channels_to_guild.find(channel_id);
     if (it == channels_to_guild.end())

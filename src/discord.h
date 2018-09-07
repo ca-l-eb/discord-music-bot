@@ -37,9 +37,11 @@ enum class voice_op {
     client_disconnect = 13
 };
 
+using snowflake = uint64_t;
+
 struct channel {
-    uint64_t id;
-    uint64_t guild_id;
+    snowflake id;
+    snowflake guild_id;
     int user_limit;
     int bitrate;
     enum class channel_type {
@@ -54,22 +56,22 @@ struct channel {
 };
 
 struct user {
-    uint64_t id;
+    snowflake id;
     std::string name;
     std::string discriminator;
     user() = default;
 };
 
 struct member {
-    discord::user user;
+    user user;
     std::string nick;
     member() = default;
 };
 
 struct voice_state {
-    uint64_t guild_id;  // server_id in docs
-    uint64_t channel_id;
-    uint64_t user_id;
+    snowflake guild_id;  // server_id in docs
+    snowflake channel_id;
+    snowflake user_id;
     std::string session_id;
     bool deaf;
     bool mute;
@@ -80,8 +82,8 @@ struct voice_state {
 };
 
 struct guild {
-    uint64_t id;
-    uint64_t owner;
+    snowflake id;
+    snowflake owner;
     std::set<channel> channels;
     std::set<member> members;
     std::set<voice_state> voice_states;
@@ -92,9 +94,9 @@ struct guild {
 };
 
 struct message {
-    uint64_t id;
-    uint64_t channel_id;
-    discord::user author;
+    snowflake id;
+    snowflake channel_id;
+    user author;
     std::string content;
     enum class message_type {
         default_ = 0,
@@ -110,7 +112,7 @@ struct message {
 };
 
 struct payload {
-    discord::gateway_op op;
+    gateway_op op;
     int sequence_num;
     std::string event_name;
     nlohmann::json data;
@@ -162,7 +164,7 @@ struct ready {
 };
 
 struct voice_server_update {
-    uint64_t guild_id;
+    snowflake guild_id;
     std::string token;
     std::string endpoint;
 };

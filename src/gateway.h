@@ -25,7 +25,7 @@ public:
     void disconnect();
     void heartbeat();
     void send(const std::string &s, transfer_cb c);
-    uint64_t get_user_id() const;
+    discord::snowflake get_user_id() const;
     const std::string &get_session_id() const;
     discord::gateway_store &get_gateway_store();
 
@@ -41,7 +41,7 @@ private:
 
     std::string token;
     std::string session_id;
-    uint64_t user_id;
+    discord::snowflake user_id;
     int seq_num;
     enum class connection_state { disconnected, connecting, connected } state;
 

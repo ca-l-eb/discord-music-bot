@@ -82,7 +82,7 @@ void discord::gateway::send(const std::string &s, transfer_cb c)
     conn.send(s, c);
 }
 
-uint64_t discord::gateway::get_user_id() const
+discord::snowflake discord::gateway::get_user_id() const
 {
     return user_id;
 }
@@ -154,13 +154,15 @@ void discord::gateway::next_event()
 {
     // Asynchronously read next message, on message received send it to listeners
     if (state != connection_state::disconnected)
-        conn.read([weak = weak_from_this()](const auto &ec, auto &json) {
-            if (ec) {
-                std::cerr << "[gateway] error: " << ec.message() << "\n";
-                return;
+        conn.read([weak = weak_from_this()](const auto &ec, const auto &json) {
+            if (auto self = weak.lock()) {
+                if (ec) {
+                    std::cerr << "[gateway] error: " << ec.message() << "\n";
+                    self->disconnect();
+                } else {
+                    self->handle_event(json);
+                }
             }
-            if (auto self = weak.lock())
-                self->handle_event(json);
         });
 }
 
@@ -171,9 +173,9 @@ void discord::gateway::handle_event(const nlohmann::json &j)
         auto payload = j.get<discord::payload>();
         seq_num = payload.sequence_num;
 
-        if (payload.event_name == "MESSAGE_CREATE") {
-            auto message = payload.data.get<discord::message>();
-        }
+        // if (payload.event_name == "MESSAGE_CREATE") {
+        //     auto message = payload.data.get<discord::message>();
+        // }
 
         switch (payload.op) {
             case gateway_op::dispatch:

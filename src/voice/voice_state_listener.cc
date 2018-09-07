@@ -10,7 +10,8 @@
 #include "voice/voice_gateway.h"
 #include "voice/voice_state_listener.h"
 
-static discord::guild *get_guild_from_channel(uint64_t channel_id, discord::gateway_store &store)
+static discord::guild *get_guild_from_channel(discord::snowflake channel_id,
+                                              discord::gateway_store &store)
 {
     auto guild_id = store.lookup_channel(channel_id);
     if (!guild_id)
@@ -175,7 +176,6 @@ void discord::voice_state_listener::do_join(const discord::message &m,
     // Check if the user sending the message is in a channel and join that channel
     if (channel_name.empty()) {
         auto find = discord::voice_state{};
-        find.user_id = m.author.id;
         // Populate user_id field in voice_state so set::find gets correct entry
         find.user_id = m.author.id;
         if (const auto &user_voice_state = guild->voice_states.find(find);
@@ -248,7 +248,8 @@ void discord::voice_state_listener::do_pause(discord::voice_gateway_entry &entry
     }
 }
 
-void discord::voice_state_listener::join_voice_server(uint64_t guild_id, uint64_t channel_id)
+void discord::voice_state_listener::join_voice_server(discord::snowflake guild_id,
+                                                      discord::snowflake channel_id)
 {
     auto guild_str = std::to_string(guild_id);
     auto channel_str = std::to_string(channel_id);
@@ -263,7 +264,7 @@ void discord::voice_state_listener::join_voice_server(uint64_t guild_id, uint64_
     gateway.send(json.dump(), print_transfer_info);
 }
 
-void discord::voice_state_listener::leave_voice_server(uint64_t guild_id)
+void discord::voice_state_listener::leave_voice_server(discord::snowflake guild_id)
 {
     // json serializer doesn't like being passed char* pointing to nullptr,
     // so I guess we need to double this method

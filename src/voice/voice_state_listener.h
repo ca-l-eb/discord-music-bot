@@ -26,8 +26,8 @@ struct music_process {
 };
 
 struct voice_gateway_entry {
-    uint64_t channel_id;
-    uint64_t guild_id;
+    discord::snowflake channel_id;
+    discord::snowflake guild_id;
     std::string session_id;
     std::string token;
     std::string endpoint;
@@ -38,6 +38,8 @@ struct voice_gateway_entry {
     std::unique_ptr<music_process> process;
     std::deque<std::string> music_queue;
 };
+
+void send_audio(voice_gateway_entry *entry);
 
 class voice_state_listener : public std::enable_shared_from_this<voice_state_listener>
 {
@@ -57,10 +59,10 @@ private:
     discord::gateway &gateway;
 
     // guild_id to voice_gateway_entry (1 voice connection per guild)
-    std::map<uint64_t, std::shared_ptr<voice_gateway_entry>> voice_gateways;
+    std::map<discord::snowflake, std::shared_ptr<voice_gateway_entry>> voice_gateways;
 
-    void join_voice_server(uint64_t guild_id, uint64_t channel_id);
-    void leave_voice_server(uint64_t guild_id);
+    void join_voice_server(discord::snowflake guild_id, discord::snowflake channel_id);
+    void leave_voice_server(discord::snowflake guild_id);
     void check_command(const discord::message &m);
     void do_join(const discord::message &m, const std::string &s);
     void do_leave(discord::voice_gateway_entry &entry);

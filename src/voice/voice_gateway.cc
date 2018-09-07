@@ -9,7 +9,8 @@
 #include "voice/voice_state_listener.h"
 
 discord::voice_gateway::voice_gateway(boost::asio::io_context &ctx, ssl::context &tls,
-                                      std::shared_ptr<voice_gateway_entry> e, uint64_t user_id)
+                                      std::shared_ptr<voice_gateway_entry> e,
+                                      discord::snowflake user_id)
     : ctx{ctx}
     , entry{e}
     , conn{ctx, tls}
@@ -236,7 +237,6 @@ void discord::voice_gateway::play(const opus_frame &frame)
     if (!is_speaking) {
         auto speak_sent_cb = [=](const auto &ec, auto) {
             if (!ec) {
-                std::cout << "[voice] now speaking in " << entry->channel_id << "\n";
                 is_speaking = true;
                 rtp.send(frame);
             }
@@ -250,6 +250,5 @@ void discord::voice_gateway::play(const opus_frame &frame)
 void discord::voice_gateway::stop()
 {
     is_speaking = false;
-    std::cout << "[voice] stopped speaking in " << entry->channel_id << "\n";
     stop_speaking(ignore_transfer);
 }

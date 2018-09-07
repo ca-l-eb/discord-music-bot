@@ -23,7 +23,7 @@ class voice_gateway : public std::enable_shared_from_this<voice_gateway>
 {
 public:
     voice_gateway(boost::asio::io_context &ctx, boost::asio::ssl::context &tls,
-                  std::shared_ptr<discord::voice_gateway_entry> e, uint64_t user_id);
+                  std::shared_ptr<discord::voice_gateway_entry> e, discord::snowflake user_id);
     void heartbeat();
     void send(const std::string &s, transfer_cb c);
     void connect(error_cb c);
@@ -38,7 +38,7 @@ private:
     discord::rtp_session rtp;
     discord::heartbeater beater;
 
-    uint64_t user_id;
+    discord::snowflake user_id;
     enum class connection_state { disconnected, connected } state;
     bool is_speaking;
     error_cb voice_connect_callback;
