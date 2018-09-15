@@ -10,6 +10,7 @@
 #include "audio/opus_encoder.h"
 #include "audio/source.h"
 #include "discord.h"
+#include "gateway_store.h"
 
 namespace discord
 {
@@ -19,7 +20,7 @@ class voice_state_listener;
 
 struct voice_context : std::enable_shared_from_this<voice_context> {
 public:
-    voice_context(boost::asio::io_context &ctx, std::shared_ptr<voice_state_listener> listener);
+    voice_context(boost::asio::io_context &ctx, const discord::gateway_store &store);
     ~voice_context();
     void on_voice_state_update(discord::voice_state s);
     void on_voice_server_update(discord::event::voice_server_update v, discord::snowflake user_id,
@@ -51,11 +52,12 @@ public:
 private:
     boost::asio::io_context &ctx;
     boost::asio::high_resolution_timer timer;
+
     std::shared_ptr<audio_source> source;
     std::shared_ptr<discord::voice_gateway> gateway;
-    std::shared_ptr<discord::voice_state_listener> listener;
     std::deque<std::string> music_queue;
 
+    const discord::gateway_store &store;
     discord::opus_encoder encoder{2, 48000};
     discord::snowflake channel_id;
     discord::snowflake guild_id;

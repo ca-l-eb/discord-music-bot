@@ -9,7 +9,7 @@
 #include "voice/voice_state_listener.h"
 
 discord::voice_gateway::voice_gateway(boost::asio::io_context &ctx, ssl::context &tls,
-                                      std::shared_ptr<discord::voice_context> voice_context,
+                                      discord::voice_context &voice_context,
                                       discord::snowflake user_id)
     : ctx{ctx}
     , voice_context{voice_context}
@@ -20,21 +20,20 @@ discord::voice_gateway::voice_gateway(boost::asio::io_context &ctx, ssl::context
     , state{connection_state::disconnected}
     , is_speaking{false}
 {
-    std::cout << "[voice] connecting to gateway " << voice_context->get_endpoint() << " session_id["
-              << voice_context->get_session_id() << "] token[" << voice_context->get_token()
-              << "]\n";
+    std::cout << "[voice] connecting to gateway " << voice_context.get_endpoint() << " session_id["
+              << voice_context.get_session_id() << "] token[" << voice_context.get_token() << "]\n";
 }
 
 void discord::voice_gateway::connect(error_cb c)
 {
     voice_connect_callback = c;
 
-    // voice_context->endpoint contains both hostname and (bogus) port, only care about hostname
-    auto parsed = uri::parse(voice_context->get_endpoint());
-    voice_context->set_endpoint(std::move(parsed.authority));
+    // voice_context.endpoint contains both hostname and (bogus) port, only care about hostname
+    auto parsed = uri::parse(voice_context.get_endpoint());
+    voice_context.set_endpoint(std::move(parsed.authority));
 
-    conn.connect("wss://" + voice_context->get_endpoint() + "/?v=3", [weak = weak_from_this()](
-                                                                         const auto &ec) {
+    conn.connect("wss://" + voice_context.get_endpoint() + "/?v=3", [weak = weak_from_this()](
+                                                                        const auto &ec) {
         if (auto self = weak.lock()) {
             if (ec) {
                 std::cerr << "[voice] websocket connect error: " << ec.message() << "\n";
@@ -51,7 +50,6 @@ void discord::voice_gateway::connect(error_cb c)
 void discord::voice_gateway::disconnect()
 {
     state = connection_state::disconnected;
-    voice_context.reset();
     conn.disconnect();
 }
 
@@ -59,10 +57,10 @@ void discord::voice_gateway::identify()
 {
     auto identify = nlohmann::json{{"op", static_cast<int>(voice_op::identify)},
                                    {"d",
-                                    {{"server_id", voice_context->get_guild_id()},
+                                    {{"server_id", voice_context.get_guild_id()},
                                      {"user_id", user_id},
-                                     {"session_id", voice_context->get_session_id()},
-                                     {"token", voice_context->get_token()}}}};
+                                     {"session_id", voice_context.get_session_id()},
+                                     {"token", voice_context.get_token()}}}};
     auto identify_sent_cb = [&](const auto &ec, auto) {
         if (ec) {
             std::cout << "[voice] gateway identify error: " << ec.message() << "\n";
@@ -160,7 +158,7 @@ void discord::voice_gateway::extract_ready_info(nlohmann::json &data)
             }
         }
     };
-    rtp.connect(voice_context->get_endpoint(), std::to_string(ready_info.port), connect_cb);
+    rtp.connect(voice_context.get_endpoint(), std::to_string(ready_info.port), connect_cb);
 }
 
 void discord::voice_gateway::extract_session_info(nlohmann::json &data)
@@ -211,9 +209,9 @@ void discord::voice_gateway::resume()
     state = connection_state::disconnected;
     auto resumed = nlohmann::json{{"op", static_cast<int>(voice_op::resume)},
                                   {"d",
-                                   {{"server_id", voice_context->get_guild_id()},
-                                    {"session_id", voice_context->get_session_id()},
-                                    {"token", voice_context->get_token()}}}};
+                                   {{"server_id", voice_context.get_guild_id()},
+                                    {"session_id", voice_context.get_session_id()},
+                                    {"token", voice_context.get_token()}}}};
     send(resumed.dump(), ignore_transfer);
 }
 

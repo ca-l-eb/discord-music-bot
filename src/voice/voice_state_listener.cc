@@ -10,16 +10,6 @@
 #include "voice/voice_gateway.h"
 #include "voice/voice_state_listener.h"
 
-static const discord::guild *get_guild_from_channel(discord::snowflake channel_id,
-                                                    const discord::gateway_store &store)
-{
-    auto guild_id = store.lookup_channel(channel_id);
-    if (guild_id == 0)
-        return nullptr;
-
-    return store.get_guild(guild_id);
-}
-
 discord::voice_state_listener::voice_state_listener(boost::asio::io_context &ctx, ssl::context &tls,
                                                     discord::gateway &gateway)
     : ctx{ctx}, tls{tls}, gateway{gateway}
@@ -50,7 +40,8 @@ void discord::voice_state_listener::on_voice_state_update(const nlohmann::json &
 
     // Create the context if it doesn't exist
     if (voice_map.count(state.guild_id) == 0) {
-        voice_map[state.guild_id] = std::make_shared<voice_context>(ctx, shared_from_this());
+        voice_map[state.guild_id] =
+            std::make_shared<voice_context>(ctx, gateway.get_gateway_store());
     }
 
     voice_map[state.guild_id]->on_voice_state_update(std::move(state));
@@ -115,6 +106,16 @@ void discord::voice_state_listener::check_command(const discord::message &m)
         else if (command == "pause")
             context.pause();
     }
+}
+
+static const discord::guild *get_guild_from_channel(discord::snowflake channel_id,
+                                                    const discord::gateway_store &store)
+{
+    auto guild_id = store.lookup_channel(channel_id);
+    if (guild_id == 0)
+        return nullptr;
+
+    return store.get_guild(guild_id);
 }
 
 void discord::voice_state_listener::join_channel(const discord::message &m,
@@ -191,8 +192,8 @@ const discord::gateway &discord::voice_state_listener::get_gateway() const
 }
 
 discord::voice_context::voice_context(boost::asio::io_context &ctx,
-                                      std::shared_ptr<discord::voice_state_listener> listener)
-    : ctx{ctx}, timer{ctx}, listener{listener}
+                                      const discord::gateway_store &store)
+    : ctx{ctx}, timer{ctx}, store{store}
 {
 }
 
@@ -203,10 +204,9 @@ discord::voice_context::~voice_context()
 
 void discord::voice_context::disconnect()
 {
+    timer.cancel();
     gateway.reset();
     source.reset();
-    listener.reset();
-    timer.cancel();
 }
 
 void discord::voice_context::on_voice_state_update(discord::voice_state state)
@@ -225,7 +225,7 @@ void discord::voice_context::on_voice_server_update(discord::event::voice_server
         endpoint = std::move(v.endpoint);
 
         // We got all the information needed to connect to a voice gateway
-        gateway = std::make_shared<discord::voice_gateway>(ctx, tls, shared_from_this(), user_id);
+        gateway = std::make_shared<discord::voice_gateway>(ctx, tls, *this, user_id);
 
         std::cout << "[voice] created voice gateway\n";
 
@@ -246,7 +246,7 @@ void discord::voice_context::on_voice_server_update(discord::event::voice_server
 
 void discord::voice_context::update_bitrate()
 {
-    auto guild = get_guild_from_channel(channel_id, listener->get_gateway().get_gateway_store());
+    auto guild = get_guild_from_channel(channel_id, store);
     if (!guild)
         return;
 
@@ -303,8 +303,6 @@ void discord::voice_context::play()
         next_audio_source();
     } else if (p_state == voice_context::state::paused) {
         p_state = voice_context::state::playing;  // Resume
-    }
-    if (p_state == voice_context::state::playing) {
         send_next_frame();
     }
 }
@@ -355,10 +353,13 @@ void discord::voice_context::next_audio_source()
 
 void discord::voice_context::send_next_frame()
 {
-    assert(source);
-    assert(p_state == voice_context::state::playing);
-    using namespace std::chrono;
+    if (p_state != voice_context::state::playing)
+        return;
 
+    assert(source);
+
+    using namespace std::chrono;
+    using namespace std::chrono;
     static auto last_frame_time = high_resolution_clock::now();
     static auto last_frame_size = 0;
 
@@ -397,6 +398,7 @@ void discord::voice_context::send_next_frame()
     if (frame.end_of_source) {
         // Done with the current source, play next entry
         std::cout << "[voice] sound clip finished\n";
+        timer.cancel();
         gateway->stop();
         p_state = voice_context::state::connected;
         play();
