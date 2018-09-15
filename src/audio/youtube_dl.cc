@@ -7,15 +7,14 @@
 
 static const auto channels = 2;
 
-youtube_dl_source::youtube_dl_source(boost::asio::io_context &ctx, discord::opus_encoder &encoder,
-                                     const std::string &url, error_cb c)
-    : ctx{ctx}, encoder{encoder}, pipe{ctx}, callback{c}, url{url}
+youtube_dl_source::youtube_dl_source(discord::voice_context &voice_context, const std::string &url)
+    : voice_context{voice_context}, pipe{voice_context.get_io_context()}, url{url}
 {
 }
 
 opus_frame youtube_dl_source::next()
 {
-    return next_frame(decoder, encoder, buffer.data(), buffer.size());
+    return next_frame(decoder, voice_context.get_encoder(), buffer.data(), buffer.size());
 }
 
 void youtube_dl_source::prepare()
@@ -51,7 +50,7 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
         }
         if (decoder.ready()) {
             notified = true;
-            boost::asio::post(ctx, [=]() { callback({}); });
+            voice_context.notify_audio_source_ready({});
         }
     }
 #endif
@@ -81,12 +80,12 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
             notified = true;
             auto error = decoder.ready() ? boost::system::error_code{}
                                          : make_error_code(boost::system::errc::io_error);
-            boost::asio::post(ctx, [=]() { callback(error); });
+            voice_context.notify_audio_source_ready(error);
         }
     } else {
         std::cerr << "[youtube-dl source] pipe read error: " << e.message() << "\n";
         if (!notified) {
-            boost::asio::post(ctx, [=]() { callback(e); });
+            voice_context.notify_audio_source_ready(e);
             notified = true;
         }
     }

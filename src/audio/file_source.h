@@ -9,21 +9,19 @@
 #include "audio/source.h"
 #include "callbacks.h"
 #include "discord.h"
+#include "voice/voice_state_listener.h"
 
 class file_source : public audio_source
 {
 public:
-    file_source(boost::asio::io_context &ctx, discord::opus_encoder &encoder,
-                const std::string &file_path, error_cb c);
+    file_source(discord::voice_context &voice_context, const std::string &file_path);
     virtual ~file_source() = default;
     virtual opus_frame next();
     virtual void prepare();
 
 private:
-    boost::asio::io_context &ctx;
-    discord::opus_encoder &encoder;
+    discord::voice_context &voice_context;
     const std::string &file_path;
-    error_cb callback;
 
     float_audio_decoder decoder;
     std::array<uint8_t, 8192> buffer;

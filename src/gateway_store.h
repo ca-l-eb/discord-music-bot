@@ -21,8 +21,8 @@ public:
     void voice_state_update(const nlohmann::json &json);
 
     // Returns the guild_id that the channel is in
-    discord::snowflake lookup_channel(discord::snowflake channel_id);
-    discord::guild *get_guild(discord::snowflake guild_id);
+    discord::snowflake lookup_channel(discord::snowflake channel_id) const;
+    const discord::guild *get_guild(discord::snowflake guild_id) const;
 
 private:
     std::map<discord::snowflake, std::unique_ptr<discord::guild>>

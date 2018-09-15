@@ -17,13 +17,13 @@
 
 namespace discord
 {
-struct voice_gateway_entry;
-
+struct voice_context;
 class voice_gateway : public std::enable_shared_from_this<voice_gateway>
 {
 public:
     voice_gateway(boost::asio::io_context &ctx, boost::asio::ssl::context &tls,
-                  std::shared_ptr<discord::voice_gateway_entry> e, discord::snowflake user_id);
+                  std::shared_ptr<discord::voice_context> voice_context,
+                  discord::snowflake user_id);
     void heartbeat();
     void send(const std::string &s, transfer_cb c);
     void connect(error_cb c);
@@ -33,7 +33,7 @@ public:
 
 private:
     boost::asio::io_context &ctx;
-    std::shared_ptr<discord::voice_gateway_entry> entry;
+    std::shared_ptr<discord::voice_context> voice_context;
     discord::connection conn;
     discord::rtp_session rtp;
     discord::heartbeater beater;

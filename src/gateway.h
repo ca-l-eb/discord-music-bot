@@ -27,7 +27,7 @@ public:
     void send(const std::string &s, transfer_cb c);
     discord::snowflake get_user_id() const;
     const std::string &get_session_id() const;
-    discord::gateway_store &get_gateway_store();
+    const discord::gateway_store &get_gateway_store() const;
 
     using discord_event_cb = std::function<void(const nlohmann::json &)>;
 

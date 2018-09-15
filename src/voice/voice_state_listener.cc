@@ -10,32 +10,14 @@
 #include "voice/voice_gateway.h"
 #include "voice/voice_state_listener.h"
 
-static discord::guild *get_guild_from_channel(discord::snowflake channel_id,
-                                              discord::gateway_store &store)
+static const discord::guild *get_guild_from_channel(discord::snowflake channel_id,
+                                                    const discord::gateway_store &store)
 {
     auto guild_id = store.lookup_channel(channel_id);
-    if (!guild_id)
+    if (guild_id == 0)
         return nullptr;
 
     return store.get_guild(guild_id);
-}
-
-static void update_bitrate(discord::voice_gateway_entry &entry, discord::gateway_store &store)
-{
-    auto guild = get_guild_from_channel(entry.channel_id, store);
-    if (!guild)
-        return;
-
-    // to_find contains channel_id to match with the desired channel to determine the audio
-    // bitrate
-    auto to_find = discord::channel{};
-    to_find.id = entry.channel_id;
-    auto channel = guild->channels.find(to_find);
-    if (channel != guild->channels.end()) {
-        entry.process->encoder.set_bitrate(channel->bitrate);
-        std::cout << "[voice state] '" << channel->name << "' playing at "
-                  << (channel->bitrate / 1000) << "Kbps\n";
-    }
 }
 
 discord::voice_state_listener::voice_state_listener(boost::asio::io_context &ctx, ssl::context &tls,
@@ -51,67 +33,38 @@ discord::voice_state_listener::~voice_state_listener()
 
 void discord::voice_state_listener::disconnect()
 {
-    for (auto &it : voice_gateways) {
-        it.second->gateway->disconnect();
+    for (auto &it : voice_map) {
+        it.second->disconnect();
     }
-    voice_gateways.clear();
+    voice_map.clear();
 }
 
 void discord::voice_state_listener::on_voice_state_update(const nlohmann::json &data)
 {
     auto state = data.get<discord::voice_state>();
-    assert(state.guild_id);
 
     // We're looking for voice state update for this user_id
     if (gateway.get_user_id() != state.user_id) {
         return;
     }
 
-    // Create the entry if it doesn't exist
-    if (voice_gateways.count(state.guild_id) == 0) {
-        voice_gateways[state.guild_id] = std::make_shared<voice_gateway_entry>();
+    // Create the context if it doesn't exist
+    if (voice_map.count(state.guild_id) == 0) {
+        voice_map[state.guild_id] = std::make_shared<voice_context>(ctx, shared_from_this());
     }
 
-    auto &entry = *voice_gateways[state.guild_id];
-    entry.channel_id = state.channel_id;
-    entry.guild_id = state.guild_id;
-    entry.session_id = std::move(state.session_id);
-
-    if (entry.process)
-        update_bitrate(entry, gateway.get_gateway_store());
+    voice_map[state.guild_id]->on_voice_state_update(std::move(state));
 }
 
 void discord::voice_state_listener::on_voice_server_update(const nlohmann::json &data)
 {
     auto vsu = data.get<discord::event::voice_server_update>();
 
-    auto it = voice_gateways.find(vsu.guild_id);
-    if (it == voice_gateways.end()) {
+    auto it = voice_map.find(vsu.guild_id);
+    if (it == voice_map.end()) {
         return;
     }
-
-    auto &entry = it->second;
-    assert(vsu.guild_id == entry->guild_id);
-    entry->token = std::move(vsu.token);
-    entry->endpoint = std::move(vsu.endpoint);
-
-    auto gateway_connect_cb = [weak = weak_from_this(), &entry](const auto &ec) {
-        if (auto self = weak.lock()) {
-            if (ec) {
-                std::cerr << "[voice state] voice gateway connection error: " << ec.message()
-                          << "\n";
-            } else {
-                std::cout << "[voice state] connected to voice gateway. Ready to send audio\n";
-                entry->p_state = voice_gateway_entry::state::connected;
-            }
-        }
-    };
-
-    // We got all the information needed to join a voice gateway now
-    entry->gateway =
-        std::make_shared<discord::voice_gateway>(ctx, tls, entry, gateway.get_user_id());
-    std::cout << "[voice state] created voice gateway\n";
-    entry->gateway->connect(gateway_connect_cb);
+    it->second->on_voice_server_update(std::move(vsu), gateway.get_user_id(), tls);
 }
 
 // Listen for guild text messages indicating to join, leave, play, pause, etc.
@@ -142,109 +95,63 @@ void discord::voice_state_listener::check_command(const discord::message &m)
     std::transform(command.begin(), command.end(), command.begin(), ::tolower);
 
     auto guild_id = gateway.get_gateway_store().lookup_channel(m.channel_id);
-    auto it = voice_gateways.find(guild_id);
+    auto it = voice_map.find(guild_id);
 
     if (command == "join") {
-        do_join(m, params);
-    } else if (it != voice_gateways.end()) {
-        auto &entry = *it->second;
-        if (command == "leave")
-            do_leave(entry);
-        else if (command == "list" || command == "l")
-            do_list(entry);
+        join_channel(m, params);
+    } else if (it != voice_map.end()) {
+        auto &context = *it->second;
+        if (command == "leave") {
+            context.leave_channel();
+            leave_voice_server(guild_id);
+        } else if (command == "list" || command == "l")
+            context.list_queue();
         else if (command == "add" || command == "a")
-            do_add(entry, params);
+            context.add_queue(params);
         else if (command == "skip" || command == "next")
-            do_skip(entry);
+            context.skip_current();
         else if (command == "play")
-            do_play(entry);
+            context.play();
         else if (command == "pause")
-            do_pause(entry);
+            context.pause();
     }
 }
 
-void discord::voice_state_listener::do_join(const discord::message &m,
-                                            const std::string &channel_name)
+void discord::voice_state_listener::join_channel(const discord::message &m,
+                                                 const std::string &channel_name)
 {
     auto *guild = get_guild_from_channel(m.channel_id, gateway.get_gateway_store());
     if (!guild)
         return;
 
-    auto it = voice_gateways.find(guild->id);
-    auto connected = it != voice_gateways.end();
+    auto it = voice_map.find(guild->id);
+    auto connected = it != voice_map.end();
+    auto &context = it->second;
 
-    // Check if the user sending the message is in a channel and join that channel
+    // If the user does not specify a channel to join, join the channel the user is in
     if (channel_name.empty()) {
         auto find = discord::voice_state{};
-        // Populate user_id field in voice_state so set::find gets correct entry
         find.user_id = m.author.id;
+
         if (const auto &user_voice_state = guild->voice_states.find(find);
             user_voice_state != guild->voice_states.end()) {
             join_voice_server(guild->id, user_voice_state->channel_id);
         }
 
     } else {
-        // Look through the guild's channels for channel s, if it exists, join, else fail silently
+        // Look through the guild's channels for matching channel name, if it exists, join, else
+        // fail silently
         for (auto channel : guild->channels) {
             if (channel.type == discord::channel::channel_type::guild_voice &&
                 channel.name == channel_name) {
                 // Found a matching voice channel name! Join it if it is different
                 // than the currently connected channel (if any)
-                if (!connected || (it->second && it->second->channel_id != channel.id)) {
+                if (!connected || (context && context->get_channel_id() != channel.id)) {
                     join_voice_server(guild->id, channel.id);
                     return;
                 }
             }
         }
-    }
-}
-
-void discord::voice_state_listener::do_leave(discord::voice_gateway_entry &entry)
-{
-    if (entry.p_state != voice_gateway_entry::state::disconnected) {
-        entry.p_state = voice_gateway_entry::state::disconnected;
-        entry.music_queue.clear();
-        entry.gateway->stop();
-        leave_voice_server(entry.guild_id);
-    }
-}
-
-void discord::voice_state_listener::do_list(discord::voice_gateway_entry &) {}
-
-void discord::voice_state_listener::do_add(discord::voice_gateway_entry &entry,
-                                           const std::string &params)
-{
-    entry.music_queue.push_back(params);
-    if (entry.p_state == voice_gateway_entry::state::connected) {
-        do_play(entry);
-    }
-}
-
-void discord::voice_state_listener::do_skip(discord::voice_gateway_entry &entry)
-{
-    if (entry.p_state == voice_gateway_entry::state::playing ||
-        entry.p_state == voice_gateway_entry::state::paused) {
-        entry.p_state = voice_gateway_entry::state::connected;
-
-        if (!entry.music_queue.empty())
-            do_play(entry);
-        else
-            entry.gateway->stop();
-    }
-}
-
-void discord::voice_state_listener::do_play(discord::voice_gateway_entry &entry)
-{
-    if (!entry.music_queue.empty() || entry.p_state == voice_gateway_entry::state::paused) {
-        play(entry);
-    }
-}
-
-void discord::voice_state_listener::do_pause(discord::voice_gateway_entry &entry)
-{
-    if (entry.p_state == voice_gateway_entry::state::playing) {
-        entry.p_state = voice_gateway_entry::state::paused;
-        entry.gateway->stop();
     }
 }
 
@@ -278,93 +185,199 @@ void discord::voice_state_listener::leave_voice_server(discord::snowflake guild_
     gateway.send(json.dump(), print_transfer_info);
 }
 
-void discord::voice_state_listener::play(voice_gateway_entry &entry)
+const discord::gateway &discord::voice_state_listener::get_gateway() const
 {
-    if (entry.p_state == voice_gateway_entry::state::playing)
-        return;  // We are already playing!
+    return gateway;
+}
 
-    // Connected state meaning ready to send audio, but nothing loaded at the moment
-    if (entry.p_state == voice_gateway_entry::state::connected) {
-        next_audio_source(entry);
-    } else if (entry.p_state == voice_gateway_entry::state::paused) {
-        entry.p_state = voice_gateway_entry::state::playing;  // Resume
-    }
-    if (entry.p_state == voice_gateway_entry::state::playing) {
-        send_audio(entry);
+discord::voice_context::voice_context(boost::asio::io_context &ctx,
+                                      std::shared_ptr<discord::voice_state_listener> listener)
+    : ctx{ctx}, timer{ctx}, listener{listener}
+{
+}
+
+discord::voice_context::~voice_context()
+{
+    disconnect();
+}
+
+void discord::voice_context::disconnect()
+{
+    gateway.reset();
+    source.reset();
+    listener.reset();
+    timer.cancel();
+}
+
+void discord::voice_context::on_voice_state_update(discord::voice_state state)
+{
+    channel_id = state.channel_id;
+    guild_id = state.guild_id;
+    session_id = std::move(state.session_id);
+    update_bitrate();
+}
+
+void discord::voice_context::on_voice_server_update(discord::event::voice_server_update v,
+                                                    discord::snowflake user_id, ssl::context &tls)
+{
+    if (guild_id == v.guild_id) {
+        token = std::move(v.token);
+        endpoint = std::move(v.endpoint);
+
+        // We got all the information needed to connect to a voice gateway
+        gateway = std::make_shared<discord::voice_gateway>(ctx, tls, shared_from_this(), user_id);
+
+        std::cout << "[voice] created voice gateway\n";
+
+        auto gateway_connect_cb = [weak = weak_from_this()](const auto &ec) {
+            if (auto self = weak.lock()) {
+                if (ec) {
+                    std::cerr << "[voice] voice gateway connection error: " << ec.message() << "\n";
+                } else {
+                    std::cout << "[voice] connected to voice gateway. Ready to send audio\n";
+                    self->p_state = voice_context::state::connected;
+                }
+            }
+        };
+
+        gateway->connect(gateway_connect_cb);
     }
 }
 
-void discord::voice_state_listener::next_audio_source(voice_gateway_entry &entry)
+void discord::voice_context::update_bitrate()
 {
-    if (entry.music_queue.empty())
+    auto guild = get_guild_from_channel(channel_id, listener->get_gateway().get_gateway_store());
+    if (!guild)
         return;
 
-    if (!entry.process) {
-        entry.process = std::make_unique<music_process>(ctx);
-        update_bitrate(entry, gateway.get_gateway_store());
+    // to_find contains channel_id to match with the desired channel to determine the audio
+    // bitrate
+    auto to_find = discord::channel{};
+    to_find.id = channel_id;
+    auto channel = guild->channels.find(to_find);
+    if (channel != guild->channels.end()) {
+        encoder.set_bitrate(channel->bitrate);
+        std::cout << "[voice] '" << channel->name << "' playing at " << (channel->bitrate / 1000)
+                  << "Kbps\n";
     }
+}
+
+void discord::voice_context::leave_channel()
+{
+    if (p_state != voice_context::state::disconnected) {
+        p_state = voice_context::state::disconnected;
+        music_queue.clear();
+        gateway->stop();
+    }
+}
+
+void discord::voice_context::list_queue() {}
+
+void discord::voice_context::add_queue(const std::string &params)
+{
+    music_queue.push_back(params);
+    if (p_state == voice_context::state::connected) {
+        play();
+    }
+}
+
+void discord::voice_context::skip_current()
+{
+    if (p_state == voice_context::state::playing || p_state == voice_context::state::paused) {
+        p_state = voice_context::state::connected;
+
+        if (!music_queue.empty())
+            play();
+        else
+            gateway->stop();
+    }
+}
+
+void discord::voice_context::play()
+{
+    if (p_state == voice_context::state::playing)
+        return;  // We are already playing!
+
+    // Connected state meaning ready to send audio, but nothing loaded at the moment
+    if (p_state == voice_context::state::connected) {
+        next_audio_source();
+    } else if (p_state == voice_context::state::paused) {
+        p_state = voice_context::state::playing;  // Resume
+    }
+    if (p_state == voice_context::state::playing) {
+        send_next_frame();
+    }
+}
+
+void discord::voice_context::pause()
+{
+    if (p_state == voice_context::state::playing) {
+        p_state = voice_context::state::paused;
+        gateway->stop();
+    }
+}
+
+void discord::voice_context::notify_audio_source_ready(const boost::system::error_code &ec)
+{
+    if (ec) {
+        std::cerr << "[voice] error making audio source: " << ec.message() << "\n";
+        return;
+    }
+    p_state = voice_context::state::playing;
+    send_next_frame();
+}
+
+void discord::voice_context::next_audio_source()
+{
+    if (music_queue.empty())
+        return;
 
     // Get the next song from the queue
-    auto next = std::move(entry.music_queue.front());
-    entry.music_queue.pop_front();
-
-    auto callback = [&](const auto &ec) {
-        if (ec) {
-            std::cerr << "[voice state] error making audio source: " << ec.message() << "\n";
-            return;
-        }
-        entry.p_state = voice_gateway_entry::state::playing;
-        send_audio(entry);
-    };
+    auto next = std::move(music_queue.front());
+    music_queue.pop_front();
 
     auto parsed = uri::parse(next);
     if (parsed.authority.empty()) {
-        std::cerr << "[voice state] invalid audio source\n";
+        std::cerr << "[voice] invalid audio source\n";
         return;
     }
     static auto valid_youtube_dl_sources =
         std::set<std::string>{"youtube.com", "youtu.be", "www.youtube.com"};
 
     if (valid_youtube_dl_sources.count(parsed.authority)) {
-        entry.process->source =
-            std::make_shared<youtube_dl_source>(ctx, entry.process->encoder, next, callback);
-        entry.process->source->prepare();
+        source = std::make_shared<youtube_dl_source>(*this, next);
+        source->prepare();
     } else if (parsed.scheme == "file") {
-        entry.process->source =
-            std::make_shared<file_source>(ctx, entry.process->encoder, parsed.path, callback);
-        entry.process->source->prepare();
+        source = std::make_shared<file_source>(*this, parsed.path);
+        source->prepare();
     }
 }
 
-void discord::voice_state_listener::send_audio(voice_gateway_entry &entry)
+void discord::voice_context::send_next_frame()
 {
-    assert(entry.process);
-    assert(entry.process->source);
-    assert(entry.p_state == voice_gateway_entry::state::playing);
-
+    assert(source);
+    assert(p_state == voice_context::state::playing);
     using namespace std::chrono;
 
     static auto last_frame_time = high_resolution_clock::now();
     static auto last_frame_size = 0;
 
     auto start = high_resolution_clock::now();
-    auto frame = entry.process->source->next();
+    auto frame = source->next();
     auto retrieval_time_us =
         duration_cast<microseconds>(high_resolution_clock::now() - start).count();
     auto time_since_last_frame_us = duration_cast<microseconds>(start - last_frame_time).count();
 
-    auto timer_done_cb = [weak = weak_from_this(), &entry](const auto &ec) {
-        if (auto self = weak.lock()) {
-            if (!ec && entry.p_state == voice_gateway_entry::state::playing) {
-                self->send_audio(entry);
-            }
-        }
+    // auto timer_done_cb = [weak = weak_from_this()](const auto &ec) {
+    auto timer_done_cb = [this](const auto &ec) {
+        if (!ec)
+            send_next_frame();
     };
 
     if (!frame.data.empty()) {
         auto fc = frame.frame_count;
         if (!(fc == 120 || fc == 240 || fc == 480 || fc == 960 || fc == 1920 || fc == 2880)) {
-            std::cerr << "[voice state] invalid frame size: " << fc << "\n";
+            std::cerr << "[voice] invalid frame size: " << fc << "\n";
             return;
         }
 
@@ -373,22 +386,62 @@ void discord::voice_state_listener::send_audio(voice_gateway_entry &entry)
 
         // Next timer expires after frame_size / 48000 seconds, or frame size / 48 ms
         auto expires_us = frame.frame_count * 1000 / 48 - retrieval_time_us - time_offset;
-        entry.process->timer.expires_after(microseconds(expires_us));
+        timer.expires_after(microseconds(expires_us));
 
         // Play the frame
-        entry.gateway->play(frame);
+        gateway->play(frame);
     } else if (!frame.end_of_source) {
         // Data from source not yet available... try again in a little
-        entry.process->timer.expires_from_now(microseconds(500));
+        timer.expires_from_now(microseconds(500));
     }
     if (frame.end_of_source) {
         // Done with the current source, play next entry
-        std::cout << "[voice state] sound clip finished\n";
-        entry.gateway->stop();
-        entry.p_state = voice_gateway_entry::state::connected;
-        play(entry);
+        std::cout << "[voice] sound clip finished\n";
+        gateway->stop();
+        p_state = voice_context::state::connected;
+        play();
     }
     last_frame_size = frame.frame_count;
     last_frame_time = start;
-    entry.process->timer.async_wait(timer_done_cb);
+    timer.async_wait(timer_done_cb);
+}
+
+discord::snowflake discord::voice_context::get_channel_id() const
+{
+    return channel_id;
+}
+
+discord::snowflake discord::voice_context::get_guild_id() const
+{
+    return guild_id;
+}
+
+const std::string &discord::voice_context::get_session_id() const
+{
+    return session_id;
+}
+
+const std::string &discord::voice_context::get_token() const
+{
+    return token;
+}
+
+const std::string &discord::voice_context::get_endpoint() const
+{
+    return endpoint;
+}
+
+void discord::voice_context::set_endpoint(const std::string &s)
+{
+    endpoint = s;
+}
+
+discord::opus_encoder &discord::voice_context::get_encoder()
+{
+    return encoder;
+}
+
+boost::asio::io_context &discord::voice_context::get_io_context()
+{
+    return ctx;
 }

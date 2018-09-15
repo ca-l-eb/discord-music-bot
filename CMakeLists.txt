@@ -69,7 +69,6 @@ target_link_libraries(discordbot
 
 target_include_directories(discordbot
 PRIVATE
-    Boost::boost
     ${OPENSSL_INCLUDE_DIRS}
     ${FFmpeg_INCLUDE_DIRS}
     ${Opus_INCLUDE_DIRS}

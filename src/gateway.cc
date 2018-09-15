@@ -230,7 +230,7 @@ void discord::gateway::run_gateway_dispatch(const nlohmann::json &data,
     }
 }
 
-discord::gateway_store &discord::gateway::get_gateway_store()
+const discord::gateway_store &discord::gateway::get_gateway_store() const
 {
     return store;
 }
