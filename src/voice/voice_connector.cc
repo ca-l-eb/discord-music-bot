@@ -7,21 +7,21 @@
 #include "audio/youtube_dl.h"
 #include "gateway.h"
 #include "net/uri.h"
+#include "voice/voice_connector.h"
 #include "voice/voice_gateway.h"
-#include "voice/voice_state_listener.h"
 
-discord::voice_state_listener::voice_state_listener(boost::asio::io_context &ctx, ssl::context &tls,
-                                                    discord::gateway &gateway)
+discord::voice_connector::voice_connector(boost::asio::io_context &ctx, ssl::context &tls,
+                                          discord::gateway &gateway)
     : ctx{ctx}, tls{tls}, gateway{gateway}
 {
 }
 
-discord::voice_state_listener::~voice_state_listener()
+discord::voice_connector::~voice_connector()
 {
     disconnect();
 }
 
-void discord::voice_state_listener::disconnect()
+void discord::voice_connector::disconnect()
 {
     for (auto &it : voice_map) {
         it.second->disconnect();
@@ -29,7 +29,7 @@ void discord::voice_state_listener::disconnect()
     voice_map.clear();
 }
 
-void discord::voice_state_listener::on_voice_state_update(const nlohmann::json &data)
+void discord::voice_connector::on_voice_state_update(const nlohmann::json &data)
 {
     auto state = data.get<discord::voice_state>();
 
@@ -47,7 +47,7 @@ void discord::voice_state_listener::on_voice_state_update(const nlohmann::json &
     voice_map[state.guild_id]->on_voice_state_update(std::move(state));
 }
 
-void discord::voice_state_listener::on_voice_server_update(const nlohmann::json &data)
+void discord::voice_connector::on_voice_server_update(const nlohmann::json &data)
 {
     auto vsu = data.get<discord::event::voice_server_update>();
 
@@ -59,7 +59,7 @@ void discord::voice_state_listener::on_voice_server_update(const nlohmann::json 
 }
 
 // Listen for guild text messages indicating to join, leave, play, pause, etc.
-void discord::voice_state_listener::on_message_create(const nlohmann::json &data)
+void discord::voice_connector::on_message_create(const nlohmann::json &data)
 {
     auto msg = data.get<discord::message>();
     if (msg.type != discord::message::message_type::default_)
@@ -72,7 +72,7 @@ void discord::voice_state_listener::on_message_create(const nlohmann::json &data
         check_command(msg);
 }
 
-void discord::voice_state_listener::check_command(const discord::message &m)
+void discord::voice_connector::check_command(const discord::message &m)
 {
     static auto command_re = std::regex{R"(^:(\S+)(?:\s+(.+))?$)"};
     auto matcher = std::smatch{};
@@ -118,8 +118,8 @@ static const discord::guild *get_guild_from_channel(discord::snowflake channel_i
     return store.get_guild(guild_id);
 }
 
-void discord::voice_state_listener::join_channel(const discord::message &m,
-                                                 const std::string &channel_name)
+void discord::voice_connector::join_channel(const discord::message &m,
+                                            const std::string &channel_name)
 {
     auto *guild = get_guild_from_channel(m.channel_id, gateway.get_gateway_store());
     if (!guild)
@@ -156,8 +156,8 @@ void discord::voice_state_listener::join_channel(const discord::message &m,
     }
 }
 
-void discord::voice_state_listener::join_voice_server(discord::snowflake guild_id,
-                                                      discord::snowflake channel_id)
+void discord::voice_connector::join_voice_server(discord::snowflake guild_id,
+                                                 discord::snowflake channel_id)
 {
     auto guild_str = std::to_string(guild_id);
     auto channel_str = std::to_string(channel_id);
@@ -172,7 +172,7 @@ void discord::voice_state_listener::join_voice_server(discord::snowflake guild_i
     gateway.send(json.dump(), print_transfer_info);
 }
 
-void discord::voice_state_listener::leave_voice_server(discord::snowflake guild_id)
+void discord::voice_connector::leave_voice_server(discord::snowflake guild_id)
 {
     // json serializer doesn't like being passed char* pointing to nullptr,
     // so I guess we need to double this method
@@ -186,7 +186,7 @@ void discord::voice_state_listener::leave_voice_server(discord::snowflake guild_
     gateway.send(json.dump(), print_transfer_info);
 }
 
-const discord::gateway &discord::voice_state_listener::get_gateway() const
+const discord::gateway &discord::voice_connector::get_gateway() const
 {
     return gateway;
 }

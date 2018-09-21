@@ -5,8 +5,8 @@
 #include "discord.h"
 #include "errors.h"
 #include "net/uri.h"
+#include "voice/voice_connector.h"
 #include "voice/voice_gateway.h"
-#include "voice/voice_state_listener.h"
 
 discord::voice_gateway::voice_gateway(boost::asio::io_context &ctx, ssl::context &tls,
                                       discord::voice_context &voice_context,

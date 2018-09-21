@@ -54,8 +54,8 @@ PRIVATE
     src/voice/crypto.h
     src/voice/voice_gateway.cc
     src/voice/voice_gateway.h
-    src/voice/voice_state_listener.cc
-    src/voice/voice_state_listener.h
+    src/voice/voice_connector.cc
+    src/voice/voice_connector.h
 )
 
 target_link_libraries(discordbot

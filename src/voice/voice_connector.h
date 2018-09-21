@@ -1,5 +1,5 @@
-#ifndef DISCORD_VOICE_STATE_LISTENER_H
-#define DISCORD_VOICE_STATE_LISTENER_H
+#ifndef DISCORD_VOICE_CONNECTOR_H
+#define DISCORD_VOICE_CONNECTOR_H
 
 #include <boost/asio/high_resolution_timer.hpp>
 #include <boost/asio/io_context.hpp>
@@ -16,7 +16,7 @@ namespace discord
 {
 class gateway;
 class voice_gateway;
-class voice_state_listener;
+class voice_connector;
 
 struct voice_context : std::enable_shared_from_this<voice_context> {
 public:
@@ -70,12 +70,11 @@ private:
     void update_bitrate();
 };
 
-class voice_state_listener : public std::enable_shared_from_this<voice_state_listener>
+class voice_connector : public std::enable_shared_from_this<voice_connector>
 {
 public:
-    voice_state_listener(boost::asio::io_context &ctx, ssl::context &tls,
-                         discord::gateway &gateway);
-    ~voice_state_listener();
+    voice_connector(boost::asio::io_context &ctx, ssl::context &tls, discord::gateway &gateway);
+    ~voice_connector();
 
     void disconnect();
     void on_voice_state_update(const nlohmann::json &data);

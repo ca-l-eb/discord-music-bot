@@ -11,7 +11,7 @@
 #include "audio/opus_encoder.h"
 #include "audio/source.h"
 #include "callbacks.h"
-#include "voice/voice_state_listener.h"
+#include "voice/voice_connector.h"
 
 class youtube_dl_source : public audio_source,
                           public std::enable_shared_from_this<youtube_dl_source>

@@ -2,8 +2,8 @@
 
 #include "errors.h"
 #include "gateway.h"
+#include "voice/voice_connector.h"
 #include "voice/voice_gateway.h"
-#include "voice/voice_state_listener.h"
 
 static void check_quit(discord::gateway *gateway, boost::asio::io_context &ctx,
                        const nlohmann::json &json)
@@ -38,7 +38,7 @@ discord::gateway::gateway(boost::asio::io_context &ctx, ssl::context &tls, const
     event_to_handler.emplace("VOICE_STATE_UPDATE",
                              [&](const auto &json) { store.voice_state_update(json); });
 
-    auto handler = std::make_shared<voice_state_listener>(ctx, tls, *this);
+    auto handler = std::make_shared<voice_connector>(ctx, tls, *this);
     event_to_handler.emplace("VOICE_STATE_UPDATE",
                              [handler](const auto &json) { handler->on_voice_state_update(json); });
     event_to_handler.emplace("VOICE_SERVER_UPDATE", [handler](const auto &json) {

@@ -9,7 +9,7 @@
 #include "audio/source.h"
 #include "callbacks.h"
 #include "discord.h"
-#include "voice/voice_state_listener.h"
+#include "voice/voice_connector.h"
 
 class file_source : public audio_source
 {
