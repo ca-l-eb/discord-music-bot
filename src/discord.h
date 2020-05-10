@@ -4,7 +4,7 @@
 #include <set>
 #include <string>
 
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 
 namespace discord
 {
@@ -118,6 +118,7 @@ struct voice_payload {
 };
 
 struct voice_ready {
+    std::string host;
     uint32_t ssrc;
     uint16_t port;
 };

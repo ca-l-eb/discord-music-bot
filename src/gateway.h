@@ -4,7 +4,7 @@
 #include <memory>
 
 #include <boost/asio/io_context.hpp>
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 
 #include "aliases.h"
 #include "callbacks.h"

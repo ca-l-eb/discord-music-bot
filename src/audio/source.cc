@@ -1,6 +1,7 @@
 #include <array>
 #include <iostream>
 #include <stdexcept>
+#include <string>
 
 #include "audio/source.h"
 
@@ -24,13 +25,13 @@ opus_frame next_frame(float_audio_decoder &decoder, discord::opus_encoder &encod
         frame.end_of_source = true;
 
         // Want to clear the remaining frames to 0
-        auto start = buffer + read * channels;
+        auto start = buffer + static_cast<size_t>(read) * channels;
         auto end = buffer + frames_wanted * channels;
         std::fill(start, end, 0.0f);
     }
     if (read > 0) {
         auto buf = std::array<uint8_t, 512>{};
-        auto encoded_len = encoder.encode(float_buf, frames_wanted, buf.data(), buf.size());
+        auto encoded_len = encoder.encode(float_buf, frames_wanted, buf.data(), static_cast<int>(buf.size()));
         if (encoded_len > 0) {
             frame.data.reserve(encoded_len);
             frame.data.insert(std::begin(frame.data), buf.data(), buf.data() + encoded_len);

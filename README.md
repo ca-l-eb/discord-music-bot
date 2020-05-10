@@ -1,10 +1,11 @@
 ## About
-This is a self-hosted, basic music streaming bot for [Discord](https://discordapp.com/) written in C++(17). I've tested and got it working on Linux and macOS, but runs best on Linux.
+This is a self-hosted, basic music streaming bot for [Discord](https://discordapp.com/) written in C++(17). I've tested and got it working on Linux, macOS, and Windows, but runs best on Linux.
 
 ## Building
 ```
 mkdir build
 cd build
+conan install ..
 cmake ..
 cmake --build .
 ```

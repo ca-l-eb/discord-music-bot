@@ -1,81 +1,52 @@
-#include <gtest/gtest.h>
+#define CATCH_CONFIG_MAIN
+#include <catch2/catch.hpp>
+
 #include <fstream>
 #include <iostream>
+#include <iterator>
 
 #include "discord.h"
 #include "gateway_store.h"
 
-std::string read_file(std::string file_path)
+static const char * guild1_text =  R"EOF({"t":"GUILD_CREATE","s":2,"op":0,"d":{"voice_states":[],"verification_level":0,"unavailable":false,"system_channel_id":null,"splash":null,"roles":[{"position":0,"permissions":104324161,"name":"@everyone","mentionable":false,"managed":false,"id":"179378178601517056","hoist":false,"color":0},{"position":8,"permissions":372759673,"name":"Main","mentionable":false,"managed":false,"id":"188932546241888256","hoist":false,"color":3447003},{"position":6,"permissions":104324161,"name":"Pickles","mentionable":false,"managed":false,"id":"191803649876295680","hoist":true,"color":3066993},{"position":5,"permissions":104324161,"name":"Princess","mentionable":false,"managed":false,"id":"246522587306393600","hoist":true,"color":10181046},{"position":7,"permissions":1073216639,"name":"Admin","mentionable":true,"managed":false,"id":"252375972865638400","hoist":true,"color":15277667},{"position":4,"permissions":298048,"name":"MathBot","mentionable":false,"managed":true,"id":"253679760440426498","hoist":false,"color":0},{"position":3,"permissions":262216,"name":"SwagBot","mentionable":false,"managed":true,"id":"253680791576510464","hoist":false,"color":0},{"position":1,"permissions":1580727409,"name":"Memel0rd","mentionable":false,"managed":false,"id":"348252425976545280","hoist":true,"color":657673},{"position":1,"permissions":37088320,"name":"Okita","mentionable":false,"managed":true,"id":"361042070464626698","hoist":false,"color":0},{"position":1,"permissions":3148800,"name":"TestBot","mentionable":false,"managed":true,"id":"369005484000149505","hoist":false,"color":0}],"region":"us-west","presences":[{"user":{"id":"88444734955094016"},"status":"idle","game":{"type":0,"timestamps":{"start":1509037552824.0},"name":"Destiny 2"}},{"user":{"id":"134073775925886976"},"status":"online","game":{"type":0,"name":"bit.ly/mb-code"}},{"user":{"id":"138363911413039104"},"status":"online","game":{"type":0,"timestamps":{"start":1509039151632.0},"name":"Destiny 2"}},{"user":{"id":"153994498756575232"},"status":"idle","game":null},{"user":{"id":"183442005102297088"},"status":"idle","game":null},{"user":{"id":"188914411631542273"},"status":"online","game":null},{"user":{"id":"190747697588862976"},"status":"idle","game":null},{"user":{"id":"197820932604166145"},"status":"online","game":{"type":0,"timestamps":{"start":1509043134604.0},"name":"Destiny 2"}},{"user":{"id":"197901840791109632"},"status":"idle","game":null},{"user":{"id":"213120617518465036"},"status":"online","game":{"type":0,"timestamps":{"start":1509042091567.0},"name":"Destiny 2"}},{"user":{"id":"214666661763088384"},"status":"idle","game":null},{"user":{"id":"298963480042668032"},"status":"online","game":null},{"user":{"id":"368900250074611725"},"status":"online","game":null}],"owner_id":"147536581748588544","name":"Super Fun Time","mfa_level":0,"members":[{"user":{"username":"TestBot","id":"368900250074611725","discriminator":"7006","bot":true,"avatar":null},"roles":["369005484000149505"],"nick":null,"mute":false,"joined_at":"2017-10-15T06:15:50.765313+00:00","deaf":false},{"user":{"username":"MathBot","id":"134073775925886976","discriminator":"7353","bot":true,"avatar":"970d33bddeb40f9b7a20f7524a6b07f5"},"roles":["253679760440426498"],"mute":false,"joined_at":"2016-12-01T00:32:48.049000+00:00","deaf":false},{"user":{"username":"JesseDean","id":"188929944162664448","discriminator":"9577","avatar":"b22570c9e3546d8c8f996e310d8b5f9b"},"roles":["188932546241888256","191803649876295680","246522587306393600","252375972865638400","348252425976545280"],"mute":false,"joined_at":"2017-02-08T03:14:23.564000+00:00","deaf":false},{"user":{"username":"Anthony","id":"183442005102297088","discriminator":"0080","avatar":"6985cc3345fb03d20eab11c41da1e413"},"roles":[],"mute":false,"joined_at":"2017-05-29T01:48:54.034000+00:00","deaf":false},{"user":{"username":"Speed","id":"147536581748588544","discriminator":"9976","avatar":"ceb7473926b8733d5cd04fa5cdbc40df"},"roles":["188932546241888256","246522587306393600"],"mute":false,"joined_at":"2016-05-09T23:44:50.470000+00:00","deaf":false},{"user":{"username":"Bread","id":"213120617518465036","discriminator":"2429","avatar":"c7d3cd622e6f1f057f8811cc453698f3"},"roles":["188932546241888256","191803649876295680","246522587306393600","252375972865638400","348252425976545280"],"nick":"Brad","mute":false,"joined_at":"2016-08-11T02:25:58.748000+00:00","deaf":false},{"user":{"username":"PattyMelt","id":"191008454125551616","discriminator":"1812","avatar":"dd55e6ead987d9f4e35210c6ec56b1ee"},"roles":[],"mute":false,"joined_at":"2017-04-11T04:48:01.585000+00:00","deaf":false},{"user":{"username":"DrinixGornstead","id":"267835512830689280","discriminator":"6334","avatar":"0032325af3a15e02bc279372fc0a7f3f"},"roles":[],"mute":false,"joined_at":"2017-09-28T22:17:47.234000+00:00","deaf":false},{"user":{"username":"sentrixqt","id":"231943061423390721","discriminator":"1325","avatar":null},"roles":[],"mute":false,"joined_at":"2016-10-02T00:58:55.420000+00:00","deaf":false},{"user":{"username":"HiMommy","id":"182672463644065793","discriminator":"2691","avatar":null},"roles":[],"mute":false,"joined_at":"2016-06-05T07:06:50.694000+00:00","deaf":false},{"user":{"username":"zomow","id":"112721982570713088","discriminator":"3260","avatar":"78c3cdc92dbd15871509f296c8f496a0"},"roles":["191803649876295680","252375972865638400"],"nick":"Caleb","mute":false,"joined_at":"2016-06-06T03:40:29.739000+00:00","deaf":false},{"user":{"username":"HungarianWarlord","id":"183624834083848193","discriminator":"3062","avatar":null},"roles":[],"mute":false,"joined_at":"2016-05-21T16:59:32.093000+00:00","deaf":false},{"user":{"username":"Krisy Pauline","id":"189203394592768000","discriminator":"8294","avatar":"fc8d820254d42f6b146f6afdc72b1767"},"roles":["246522587306393600"],"mute":false,"joined_at":"2016-06-06T03:29:18.690000+00:00","deaf":false},{"user":{"username":"jkirstyn","id":"188912021352218626","discriminator":"2887","avatar":null},"roles":[],"mute":false,"joined_at":"2016-06-05T07:08:55.798000+00:00","deaf":false},{"user":{"username":"sppedwagon A.K.A Swagon","id":"256734024649801728","discriminator":"1507","avatar":"a472547f0a6c31b3e015ab4b73a8c8c1"},"roles":[],"nick":"Swagon","mute":false,"joined_at":"2017-06-20T08:58:12.869000+00:00","deaf":false},{"user":{"username":"Shane","id":"88444734955094016","discriminator":"9981","avatar":"aa868cc7c43583baaaa049a5f0440960"},"roles":[],"mute":false,"joined_at":"2017-02-19T07:54:55.110000+00:00","deaf":false},{"user":{"username":"sensiblemango","id":"121406615227203584","discriminator":"4336","avatar":"7ae0e525a579667eb19f11346b8eb4ce"},"roles":[],"mute":false,"joined_at":"2017-04-12T05:30:00.731000+00:00","deaf":false},{"user":{"username":"Samokato","id":"166727988229046272","discriminator":"0688","avatar":"1d2efabd77b91071f7a821ff758c525a"},"roles":[],"mute":false,"joined_at":"2016-09-12T02:27:23.965000+00:00","deaf":false},{"user":{"username":"Frederick","id":"189268582163546112","discriminator":"5916","avatar":null},"roles":[],"mute":false,"joined_at":"2016-06-06T06:45:46.455000+00:00","deaf":false},{"user":{"username":"SwagBot","id":"217065780078968833","discriminator":"7407","bot":true,"avatar":"f05d6a7e1b9929c45f989136d3acf7c0"},"roles":["253680791576510464"],"mute":false,"joined_at":"2016-12-01T00:36:53.861000+00:00","deaf":false},{"user":{"username":"Coborex","id":"190749424719364096","discriminator":"0543","avatar":"18431d6b8f486e5fccbaa9a2ac8c209f"},"roles":[],"nick":"Cody","mute":false,"joined_at":"2016-06-10T08:50:45.090000+00:00","deaf":false},{"user":{"username":"Triforce_4121","id":"197901840791109632","discriminator":"9466","avatar":"ccca11f1a122887a6915e663bba56717"},"roles":["191803649876295680","252375972865638400","246522587306393600","348252425976545280","188932546241888256"],"nick":"Matt","mute":false,"joined_at":"2017-02-16T05:56:50.890000+00:00","deaf":false},{"user":{"username":"Spore🦎","id":"297952711012515841","discriminator":"6476","avatar":"a27fc4e3cd245ec015b29a49924465a6"},"roles":[],"mute":false,"joined_at":"2017-09-28T03:51:46.977000+00:00","deaf":false},{"user":{"username":"hi","id":"188908425864806400","discriminator":"6227","avatar":null},"roles":[],"mute":false,"joined_at":"2016-06-10T08:30:34.188000+00:00","deaf":false},{"user":{"username":"Got Drums","id":"141439445692841984","discriminator":"0795","avatar":"f5a63ef00b468d52cd6ef70379070e42"},"roles":[],"mute":false,"joined_at":"2017-09-12T06:48:09.091000+00:00","deaf":false},{"user":{"username":"MrBubbles","id":"153994498756575232","discriminator":"2478","avatar":"6ec483749f30298b9c98cd3e28fb6f56"},"roles":[],"mute":false,"joined_at":"2016-05-21T16:58:23.542000+00:00","deaf":false},{"user":{"username":"Okita","id":"298963480042668032","discriminator":"9055","bot":true,"avatar":"2936901c5e266554de73e059a7a40542"},"roles":["361042070464626698"],"mute":false,"joined_at":"2017-09-23T06:52:17.422000+00:00","deaf":false},{"user":{"username":"daichi","id":"207742764765413377","discriminator":"7719","avatar":"9499338042d6f7506b59ae5af4f82401"},"roles":[],"mute":false,"joined_at":"2016-07-28T07:37:32.161000+00:00","deaf":false},{"user":{"username":"Sentrix(센릭)","id":"97819883168862208","discriminator":"1253","avatar":"955798fdb66e5646344b347a78a3fddb"},"roles":["188932546241888256","191803649876295680","246522587306393600","252375972865638400","348252425976545280"],"nick":"Sentrix (센릭)","mute":false,"joined_at":"2016-06-05T07:06:43.831000+00:00","deaf":false},{"user":{"username":"cHaoTic","id":"197820932604166145","discriminator":"6384","avatar":null},"roles":[],"mute":false,"joined_at":"2017-08-24T23:07:54.631000+00:00","deaf":false},{"user":{"username":"jkirstyn","id":"188914411631542273","discriminator":"8812","avatar":"adc7cf1c1dbf5694bf80fc827fd5199e"},"roles":["188932546241888256","246522587306393600"],"mute":false,"joined_at":"2016-06-05T07:25:24.320000+00:00","deaf":false},{"user":{"username":"Zyrox","id":"190747697588862976","discriminator":"3729","avatar":"3af140546aec6d589f1f33a43ca9adc2"},"roles":[],"nick":"Edward Rickenshire","mute":false,"joined_at":"2016-06-10T08:45:07.612000+00:00","deaf":false},{"user":{"username":"Ivi","id":"100364630555107328","discriminator":"5148","avatar":"20384127158cb80ccf36b35c2141107b"},"roles":[],"mute":false,"joined_at":"2017-07-02T06:51:05.378000+00:00","deaf":false},{"user":{"username":"Chairman Moo","id":"138363911413039104","discriminator":"1529","avatar":"a8fe1761ff7de5256c482c38d9b9c60d"},"roles":[],"mute":false,"joined_at":"2016-08-11T22:09:11.189000+00:00","deaf":false},{"user":{"username":"Mochi","id":"214666661763088384","discriminator":"4715","avatar":null},"roles":[],"mute":false,"joined_at":"2017-10-24T07:52:09.218272+00:00","deaf":false},{"user":{"username":"Milarky","id":"176481966059683841","discriminator":"0166","avatar":"abe3525f100abecdad9d74010fd0daf8"},"roles":["188932546241888256","348252425976545280"],"mute":false,"joined_at":"2016-05-09T23:45:19.810000+00:00","deaf":false},{"user":{"username":"Zcampbell24","id":"191044188232482816","discriminator":"2439","avatar":"0833eae7be1d1e94fd1580bd4e535682"},"roles":[],"mute":false,"joined_at":"2017-04-19T01:23:09.084000+00:00","deaf":false},{"user":{"username":"Canadian Slayer","id":"190744297736241152","discriminator":"2974","avatar":null},"roles":[],"mute":false,"joined_at":"2016-06-10T08:29:44.452000+00:00","deaf":false},{"user":{"username":"Aldered","id":"145048273282007041","discriminator":"2086","avatar":null},"roles":[],"mute":false,"joined_at":"2016-09-12T02:28:22.993000+00:00","deaf":false}],"member_count":39,"large":false,"joined_at":"2017-10-15T06:15:50.765313+00:00","id":"179378178601517056","icon":"90313170bd954bef7474c032dc80390c","features":[],"explicit_content_filter":0,"emojis":[{"roles":[],"require_colons":true,"name":"wtf_lol","managed":false,"id":"290008569233932288"},{"roles":[],"require_colons":true,"name":"cana_da","managed":false,"id":"290008949967552514"},{"roles":[],"require_colons":true,"name":"thonk","managed":false,"id":"349055690008166400"},{"roles":[],"require_colons":true,"name":"pepethink","managed":false,"id":"349057342966595605"},{"roles":[],"require_colons":true,"name":"lul","managed":false,"id":"350747232133185538"},{"roles":[],"require_colons":true,"name":"forsene","managed":false,"id":"350782068818575361"},{"roles":[],"require_colons":true,"name":"monkaS","managed":false,"id":"354987507646988288"},{"roles":[],"require_colons":true,"name":"wutface","managed":false,"id":"370724061895983120"}],"default_message_notifications":0,"channels":[{"type":0,"topic":"","position":0,"permission_overwrites":[],"name":"general","last_pin_timestamp":"2017-10-16T04:39:56.428081+00:00","last_message_id":"373081301701623809","id":"179378178601517056"},{"user_limit":0,"type":2,"position":5,"permission_overwrites":[],"name":"General","id":"179378178601517057","bitrate":64000},{"user_limit":0,"type":2,"position":2,"permission_overwrites":[{"type":"role","id":"179378178601517056","deny":0,"allow":0},{"type":"role","id":"191803649876295680","deny":0,"allow":0}],"name":"Speed's Apartment","id":"180054454245130240","bitrate":64000},{"user_limit":0,"type":2,"position":1,"permission_overwrites":[{"type":"role","id":"179378178601517056","deny":805306385,"allow":0}],"name":"Eric's Trucker Stop","id":"183719700826423298","bitrate":64000},{"user_limit":0,"type":2,"position":4,"permission_overwrites":[],"name":"Caleb's Disco","id":"188912035336159232","bitrate":64000},{"user_limit":7,"type":2,"position":6,"permission_overwrites":[],"name":"Jan's Van","id":"188912065820229632","bitrate":64000},{"user_limit":99,"type":2,"position":0,"permission_overwrites":[{"type":"role","id":"179378178601517056","deny":0,"allow":268435456}],"parent_id":null,"nsfw":false,"name":"Bibz's ( friends only )","id":"188928486885294080","bitrate":64000},{"user_limit":0,"type":2,"position":3,"permission_overwrites":[],"name":"Andrew's kpop room","id":"188929561587613696","bitrate":64000},{"type":0,"topic":null,"position":1,"permission_overwrites":[],"name":"seperate_text","last_message_id":"367125839520727041","id":"188931013236359169"},{"user_limit":0,"type":2,"position":7,"permission_overwrites":[],"name":"Evan's Empire","id":"190748337358635009","bitrate":64000},{"user_limit":0,"type":2,"position":8,"permission_overwrites":[],"name":"Cody's Castle","id":"190749861639880704","bitrate":64000},{"user_limit":0,"type":2,"position":9,"permission_overwrites":[],"name":"Krisy's Magical Unicorns","id":"191089659168817154","bitrate":64000},{"user_limit":0,"type":2,"position":10,"permission_overwrites":[],"name":"Daichi's Weeb Mart","id":"215335198777278464","bitrate":64000},{"type":0,"topic":null,"position":2,"permission_overwrites":[],"name":"music-requests","last_message_id":"372281326331494403","id":"361345696554811392"},{"user_limit":0,"type":2,"position":11,"permission_overwrites":[],"name":"Carly's-bat-Cave","id":"362762240132251648","bitrate":64000},{"user_limit":0,"type":2,"position":12,"permission_overwrites":[],"name":"Matt's Trifecta","id":"367864971083907073","bitrate":64000}],"application_id":null,"afk_timeout":300,"afk_channel_id":null}}
+)EOF";
+
+static const char *guild2_text = R"EOF({"t":"GUILD_CREATE","s":3,"op":0,"d":{"voice_states":[],"verification_level":0,"unavailable":false,"system_channel_id":null,"splash":null,"roles":[{"position":0,"permissions":104324161,"name":"@everyone","mentionable":false,"managed":false,"id":"312472384026181632","hoist":false,"color":0}],"region":"us-west","presences":[{"user":{"id":"368900250074611725"},"status":"online","game":null}],"owner_id":"112721982570713088","name":"blahblah","mfa_level":0,"members":[{"user":{"username":"zomow","id":"112721982570713088","discriminator":"3260","avatar":"78c3cdc92dbd15871509f296c8f496a0"},"roles":[],"mute":false,"joined_at":"2017-05-12T06:13:41.811000+00:00","deaf":false},{"user":{"username":"FckYouCaleb","id":"312471795649216512","discriminator":"6247","avatar":null},"roles":[],"nick":"CalebVotedForTrump","mute":false,"joined_at":"2017-05-12T06:17:08.330000+00:00","deaf":false},{"user":{"username":"Sinthrax","id":"312472611307388928","discriminator":"8185","avatar":null},"roles":[],"mute":false,"joined_at":"2017-05-12T06:15:41.379000+00:00","deaf":false},{"user":{"username":"TestBot","id":"368900250074611725","discriminator":"7006","bot":true,"avatar":null},"roles":[],"mute":false,"joined_at":"2017-10-14T23:21:44.088000+00:00","deaf":false}],"member_count":4,"large":false,"joined_at":"2017-10-14T23:21:44.088000+00:00","id":"312472384026181632","icon":null,"features":[],"explicit_content_filter":0,"emojis":[],"default_message_notifications":0,"channels":[{"type":0,"topic":null,"position":0,"permission_overwrites":[],"name":"general","last_message_id":"372921992036352002","id":"312472384026181632"},{"user_limit":0,"type":2,"position":0,"permission_overwrites":[],"name":"General","id":"312472384026181633","bitrate":64000}],"application_id":null,"afk_timeout":300,"afk_channel_id":null}}
+)EOF";
+
+
+TEST_CASE("guild serialization", "[serial]")
 {
-    std::ifstream ifs{file_path};
-    if (!ifs)
-        return "";
-    std::string line, contents;
-    while (ifs) {
-        std::getline(ifs, line);
-        contents += line;
-    }
-    return contents;
+    nlohmann::json json = nlohmann::json::parse(guild1_text);
+    REQUIRE(!json.is_null());
+
+    discord::guild guild = json["d"];
+    REQUIRE(147536581748588544 == guild.owner);
+    REQUIRE("Super Fun Time" == guild.name);
+    REQUIRE(39 == guild.members.size());
+    REQUIRE(16 == guild.channels.size());
 }
 
-TEST(Guild, GuildFromJson)
+TEST_CASE("gateway_store", "[serial]")
 {
-    try {
-        std::string str = read_file("./res/guild_create1");
-        if (str.empty())
-            FAIL();
+    nlohmann::json json1 = nlohmann::json::parse(guild1_text);
+    nlohmann::json json2 = nlohmann::json::parse(guild2_text);
 
-        nlohmann::json json = nlohmann::json::parse(str);
-        if (json.is_null())
-            FAIL();
-        discord::guild guild = json["d"];
-        ASSERT_EQ(147536581748588544, guild.owner);
-        ASSERT_EQ("Super Fun Time", guild.name);
-        ASSERT_EQ(39, guild.members.size());
-        ASSERT_EQ(16, guild.channels.size());
+    REQUIRE(!json1.is_null());
+    REQUIRE(!json2.is_null());
 
-    } catch (std::exception &e) {
-        std::cerr << e.what() << "\n";
-        FAIL();
-    }
-}
+    discord::gateway_store store;
+    store.guild_create(json1["d"]);
+    store.guild_create(json2["d"]);
 
-TEST(GatewayStore, LoadStore)
-{
-    try {
-        std::string g1 = read_file("./res/guild_create1");
-        std::string g2 = read_file("./res/guild_create2");
-        if (g1.empty() || g2.empty())
-            FAIL();
+    auto s = store.lookup_channel(1);
+    REQUIRE(0 == s);
 
-        nlohmann::json json1 = nlohmann::json::parse(g1);
-        nlohmann::json json2 = nlohmann::json::parse(g2);
+    // Lookup a channel id in the store structure, in this case they are the same id
+    auto guild_id = store.lookup_channel(312472384026181632);
+    REQUIRE(312472384026181632 == guild_id);
 
-        if (json1.is_null() || json2.is_null())
-            FAIL();
-
-        discord::gateway_store store;
-        store.guild_create(json1["d"]);
-        store.guild_create(json2["d"]);
-
-        auto s = store.lookup_channel(1);
-        EXPECT_EQ(0, s);
-
-        // Lookup a channel id in the store structure, in this case they are the same id
-        auto guild_id = store.lookup_channel(312472384026181632);
-        EXPECT_EQ(312472384026181632, guild_id);
-
-        // Same thing but with a different channel, this time with a different id
-        guild_id = store.lookup_channel(312472384026181633);
-        EXPECT_EQ(312472384026181632, guild_id);
-    } catch (std::exception &e) {
-        std::cerr << e.what() << "\n";
-        FAIL();
-    }
-}
-
-int main(int argc, char *argv[])
-{
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
+    // Same thing but with a different channel, this time with a different id
+    guild_id = store.lookup_channel(312472384026181633);
+    REQUIRE(312472384026181632 ==guild_id);
 }

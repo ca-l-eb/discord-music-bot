@@ -4,6 +4,7 @@
 #include <chrono>
 #include <map>
 #include <mutex>
+#include <ctime>
 
 namespace discord
 {

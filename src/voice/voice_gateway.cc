@@ -1,6 +1,6 @@
 #include <array>
 #include <iostream>
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 
 #include "discord.h"
 #include "errors.h"
@@ -158,7 +158,7 @@ void discord::voice_gateway::extract_ready_info(nlohmann::json &data)
             }
         }
     };
-    rtp.connect(voice_context.get_endpoint(), std::to_string(ready_info.port), connect_cb);
+    rtp.connect(ready_info.host, std::to_string(ready_info.port), connect_cb);
 }
 
 void discord::voice_gateway::extract_session_info(nlohmann::json &data)

@@ -1,7 +1,7 @@
 #ifndef GATEWAY_STORE_H
 #define GATEWAY_STORE_H
 
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 #include <map>
 #include <memory>
 #include <set>
