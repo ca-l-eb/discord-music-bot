@@ -6,6 +6,7 @@ libsodium/1.0.18
 ffmpeg/4.2@bincrafters/stable
 zlib/1.2.11
 openssl/1.1.1g
+catch2/2.12.1
 
 [generators]
 cmake

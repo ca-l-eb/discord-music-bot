@@ -1,12 +1,10 @@
-find_package(GTest REQUIRED)
-
-add_executable(test_json
+add_executable(serialize_test
     json_serialize_test.cc
-    ../src/discord.cc
-    ../src/discord.h
-    ../src/gateway_store.cc
-    ../src/gateway_store.h
-    )
+)
 
-target_link_libraries(test_json ${GTEST_LIBRARIES})
-target_include_directories(test_json PUBLIC ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/libs)
+target_link_libraries(serialize_test discordcpp)
+
+add_test(
+    NAME serialization
+    COMMAND serialize_test
+)
