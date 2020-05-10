@@ -23,7 +23,7 @@ void discord::connection::disconnect()
 {
     auto ec = boost::system::error_code{};
     websock.close(boost::beast::websocket::close_code::normal, ec);
-    websock.lowest_layer().close(ec);
+    websock.next_layer().lowest_layer().close(ec);
 }
 
 void discord::connection::read(json_cb c)

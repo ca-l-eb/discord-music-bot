@@ -137,6 +137,7 @@ void discord::from_json(const nlohmann::json &json, discord::voice_payload &vp)
 
 void discord::from_json(const nlohmann::json &json, discord::voice_ready &vr)
 {
+    vr.host = json.at("ip").get<std::string>();
     vr.ssrc = json.at("ssrc").get<uint32_t>();
     vr.port = json.at("port").get<uint16_t>();
 }

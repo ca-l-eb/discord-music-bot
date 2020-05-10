@@ -34,17 +34,24 @@ void discord::rtp_session::connect(const std::string &host, const std::string &p
     });
 }
 
+static constexpr auto ip_discovery_msg_size = 74U;
+
 void discord::rtp_session::ip_discovery(error_cb c)
 {
-    // Prepare buffer for ip discovery
-    std::memset(buffer.data(), 0, 70);
-    buffer[0] = (ssrc >> 24) & 0xFF;
-    buffer[1] = (ssrc >> 16) & 0xFF;
-    buffer[2] = (ssrc >> 8) & 0xFF;
-    buffer[3] = (ssrc >> 0) & 0xFF;
+    std::memset(buffer.data(), 0, ip_discovery_msg_size);
+    buffer[0] = 0;
+    buffer[1] = 1; // request
 
+    buffer[2] = 0;
+    buffer[3] = 70; // message size
+
+    buffer[4] = (ssrc >> 24) & 0xFF;
+    buffer[5] = (ssrc >> 16) & 0xFF;
+    buffer[6] = (ssrc >> 8) & 0xFF;
+    buffer[7] = (ssrc >> 0) & 0xFF;
+
+    // Receive 74 byte payload containing external ip and udp portno
     // Send buffer over socket, timing out after in case of packet loss
-    // Receive 70 byte payload containing external ip and udp portno
 
     // Let's try retry 5 times if we fail to receive response
     send_ip_discovery_datagram(5, c);
@@ -52,15 +59,15 @@ void discord::rtp_session::ip_discovery(error_cb c)
     auto udp_recv_cb = [=](const auto &ec, auto transferred) {
         if (ec) {
             c(ec);
-        } else if (transferred >= 70) {
+        } else if (transferred >= ip_discovery_msg_size) {
             // We got our response, cancel the next send
             timer.cancel();
 
             // First 4 bytes of buffer should be SSRC, next is udp socket's external IP
-            external_ip = std::string((char *) &buffer[4]);
+            external_ip = std::string((char *) &buffer[8]);
 
             // Last 2 bytes are udp port (little endian)
-            external_port = (buffer[69] << 8) | buffer[68];
+            external_port = (buffer[ip_discovery_msg_size - 1] << 8) | buffer[ip_discovery_msg_size - 2];
 
             std::cout << "[RTP] udp socket external addresses " << external_ip << ":"
                       << external_port << "\n";
@@ -94,7 +101,7 @@ void discord::rtp_session::send_ip_discovery_datagram(int retries, error_cb c)
                 send_ip_discovery_datagram(retries - 1, c);
         });
     };
-    sock.async_send(boost::asio::buffer(buffer.data(), 70), udp_sent_cb);
+    sock.async_send(boost::asio::buffer(buffer.data(), ip_discovery_msg_size), udp_sent_cb);
 }
 
 static void write_rtp_header(unsigned char *buffer, uint16_t seq_num, uint32_t timestamp,

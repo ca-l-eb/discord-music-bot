@@ -43,17 +43,6 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
         decoder.feed(buffer.data(), transferred);
         bytes_sent_to_decoder += transferred;
     }
-#if 0
-    if (!notified) {
-        if (bytes_sent_to_decoder >= 256 * 1024) {
-            decoder.check_stream();
-        }
-        if (decoder.ready()) {
-            notified = true;
-            voice_context.notify_audio_source_ready({});
-        }
-    }
-#endif
     if (!e) {
         auto pipe_read_cb = [weak = weak_from_this()](const auto &ec, size_t transferred) {
             if (auto self = weak.lock())
@@ -61,7 +50,7 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
         };
         // Read from the pipe and fill up the audio_file_data vector
         boost::asio::async_read(pipe, boost::asio::buffer(buffer), pipe_read_cb);
-    } else if (e == boost::asio::error::eof) {
+    } else if (e == boost::asio::error::eof || (bytes_sent_to_decoder > 0)) {
         std::cout << "[youtube-dl source] got eof from async_pipe\n";
 
         auto be = boost::system::error_code{};

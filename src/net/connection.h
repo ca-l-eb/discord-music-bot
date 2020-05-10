@@ -5,6 +5,8 @@
 #include "callbacks.h"
 #include "net/uri.h"
 
+#include <boost/beast/core/multi_buffer.hpp>
+
 namespace discord
 {
 class connection
