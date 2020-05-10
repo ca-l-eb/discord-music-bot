@@ -1,13 +1,13 @@
 #include <boost/asio/post.hpp>
 #include <fstream>
-#include <iostream>
+#include <spdlog/spdlog.h>
 
 #include "audio/file_source.h"
 
 file_source::file_source(discord::voice_context &voice_context, const std::string &file_path)
     : voice_context{voice_context}, file_path{file_path}
 {
-    std::cout << "[file source] playing " << file_path << "\n";
+    SPDLOG_INFO("loading file {}", file_path);
 }
 
 opus_frame file_source::next()
@@ -31,7 +31,7 @@ void file_source::prepare()
         read += ifs.gcount();
         decoder.feed(reinterpret_cast<uint8_t *>(buf.data()), ifs.gcount());
     }
-    std::cout << "[file source] read " << read << " bytes\n";
+    SPDLOG_DEBUG("read {} bytes", read);
     decoder.check_stream();
     if (!decoder.ready())
         error = make_error_code(boost::system::errc::io_error);

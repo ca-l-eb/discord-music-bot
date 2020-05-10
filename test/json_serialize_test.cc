@@ -1,10 +1,6 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
-#include <fstream>
-#include <iostream>
-#include <iterator>
-
 #include "discord.h"
 #include "gateway_store.h"
 

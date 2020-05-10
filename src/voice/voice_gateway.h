@@ -3,7 +3,6 @@
 
 #include <boost/asio/io_context.hpp>
 #include <cstdint>
-#include <iostream>
 #include <memory>
 #include <string>
 #include <vector>

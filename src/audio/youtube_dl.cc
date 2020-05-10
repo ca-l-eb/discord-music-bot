@@ -1,7 +1,7 @@
 #include <boost/asio/post.hpp>
 #include <boost/asio/read.hpp>
 #include <boost/process/io.hpp>
-#include <iostream>
+#include <spdlog/spdlog.h>
 
 #include "audio/youtube_dl.h"
 
@@ -32,7 +32,7 @@ void youtube_dl_source::make_process(const std::string &url)
     notified = false;
     bytes_sent_to_decoder = 0;
 
-    std::cout << "[youtube-dl source] created process for " << url << "\n";
+    SPDLOG_INFO("created process for {}", url);
     read_from_pipe({}, 0);
 }
 
@@ -51,7 +51,7 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
         // Read from the pipe and fill up the audio_file_data vector
         boost::asio::async_read(pipe, boost::asio::buffer(buffer), pipe_read_cb);
     } else if (e == boost::asio::error::eof || (bytes_sent_to_decoder > 0)) {
-        std::cout << "[youtube-dl source] got eof from async_pipe\n";
+        SPDLOG_DEBUG("got eof from async_pipe");
 
         auto be = boost::system::error_code{};
         auto se = std::error_code{};
@@ -61,10 +61,11 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
         child.wait(se);
 
         if (be)
-            std::cerr << "[youtube-dl source] error closing pipe: " << be.message() << "\n";
+            SPDLOG_ERROR("error closing pipe: {}", be.message());
         if (se)
-            std::cerr << "[youtube-dl source] error waiting for process: " << se.message() << "\n";
+            SPDLOG_ERROR("error waiting for process: {}", se.message());
         if (!notified) {
+            SPDLOG_INFO("notifying voice context audio is ready");
             decoder.check_stream();
             notified = true;
             auto error = decoder.ready() ? boost::system::error_code{}
@@ -72,7 +73,7 @@ void youtube_dl_source::read_from_pipe(const boost::system::error_code &e, size_
             voice_context.notify_audio_source_ready(error);
         }
     } else {
-        std::cerr << "[youtube-dl source] pipe read error: " << e.message() << "\n";
+        SPDLOG_ERROR("pipe read error: {}", e.message());
         if (!notified) {
             voice_context.notify_audio_source_ready(e);
             notified = true;

@@ -1,4 +1,4 @@
-#include <iostream>
+#include <spdlog/spdlog.h>
 
 #include "callbacks.h"
 
@@ -7,8 +7,8 @@ void ignore_transfer(const boost::system::error_code &, size_t) {}
 void print_transfer_info(const boost::system::error_code &e, size_t transferred)
 {
     if (e) {
-        std::cerr << "Transfer error: " << e.message() << "\n";
+        SPDLOG_ERROR("Tranfer error: {}", e.message());
     } else {
-        std::cout << "Transferred " << transferred << " bytes\n";
+        SPDLOG_DEBUG("Transferred {} bytes", transferred);
     }
 }

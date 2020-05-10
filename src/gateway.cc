@@ -1,4 +1,4 @@
-#include <iostream>
+#include <spdlog/spdlog.h>
 
 #include "errors.h"
 #include "gateway.h"
@@ -12,7 +12,7 @@ static void check_quit(discord::gateway *gateway, boost::asio::io_context &ctx,
     const auto message = json.get<discord::message>();
     if (message.author.id == my_user_id) {
         if (message.content == ":q" || message.content == ":quit") {
-            std::cout << "[gateway] disconnecting...\n";
+            SPDLOG_INFO("disconnecting");
             gateway->disconnect();
             ctx.restart();
             ctx.stop();
@@ -106,9 +106,9 @@ void discord::gateway::identify()
     auto callback = [weak = weak_from_this()](const auto &ec, size_t) {
         if (auto self = weak.lock()) {
             if (ec) {
-                std::cerr << "[gateway] identify send error: " << ec.message() << "\n";
+                SPDLOG_ERROR("identify send error: {}", ec.message());
             } else {
-                std::cout << "[gateway] beginning event loop\n";
+                SPDLOG_INFO("beginning event loop");
                 self->next_event();
             }
         }
@@ -125,7 +125,7 @@ void discord::gateway::resume()
     if (session_id.empty())
         throw std::runtime_error("Could not resume previous session: no such session");
 
-    std::cout << "[gateway] attempting to resume connection\n";
+    SPDLOG_WARN("attempting to resume connection");
 
     // TODO: Close the previous connection and create a new websocket
 
@@ -157,7 +157,7 @@ void discord::gateway::next_event()
         conn.read([weak = weak_from_this()](const auto &ec, const auto &json) {
             if (auto self = weak.lock()) {
                 if (ec) {
-                    std::cerr << "[gateway] error: " << ec.message() << "\n";
+                    SPDLOG_ERROR("error: {}", ec.message());
                     self->disconnect();
                 } else {
                     self->handle_event(json);
@@ -168,7 +168,7 @@ void discord::gateway::next_event()
 
 void discord::gateway::handle_event(const nlohmann::json &j)
 {
-    std::cout << "[gateway] " << j.dump() << "\n";
+    SPDLOG_DEBUG("received: {}", j.jump());
     try {
         auto payload = j.get<discord::payload>();
         seq_num = payload.sequence_num;
@@ -213,7 +213,7 @@ void discord::gateway::handle_event(const nlohmann::json &j)
         }
         next_event();
     } catch (nlohmann::json::exception &e) {
-        std::cerr << "[gateway] " << e.what() << "\n";
+        SPDLOG_ERROR("error: {}", e.what());
     }
 }
 

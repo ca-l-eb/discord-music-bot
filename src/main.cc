@@ -1,7 +1,7 @@
 #include <signal.h>
 #include <cstdlib>
-#include <iostream>
 #include <string>
+#include <spdlog/spdlog.h>
 
 #include "aliases.h"
 #include "audio/decoding.h"
@@ -22,15 +22,18 @@ void signal_handler(int)
 }
 
 int main(int argc, char *argv[])
-{
+{ 
     try {
+        spdlog::set_level(spdlog::level::debug);
+        spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%f] [%^%L%$] %v [%s:%#]");
+
         if (argc < 2) {
-            std::cerr << "Usage: " << argv[0] << " <bot token>\n";
+            SPDLOG_INFO("Usage: {} <bot token>", argv[0]);
             return EXIT_FAILURE;
         }
         auto token = std::string{argv[1]};
         if (token.length() != 59) {
-            std::cerr << "Invalid token. Token should be 59 characters long\n";
+            SPDLOG_ERROR("Invalid token. Token should be 59 characters long\n");
             return EXIT_FAILURE;
         }
 
@@ -53,7 +56,7 @@ int main(int argc, char *argv[])
 
         ctx.run();
     } catch (std::exception &e) {
-        std::cerr << "Exception: " << e.what() << "\n";
+        SPDLOG_CRITICAL("Exception: {}", e.what());
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;

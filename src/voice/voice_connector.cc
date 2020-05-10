@@ -1,7 +1,7 @@
 #include <algorithm>
-#include <iostream>
 #include <regex>
 #include <set>
+#include <spdlog/spdlog.h>
 
 #include "audio/file_source.h"
 #include "audio/youtube_dl.h"
@@ -227,14 +227,14 @@ void discord::voice_context::on_voice_server_update(discord::event::voice_server
         // We got all the information needed to connect to a voice gateway
         gateway = std::make_shared<discord::voice_gateway>(ctx, tls, *this, user_id);
 
-        std::cout << "[voice] created voice gateway\n";
+        SPDLOG_INFO("created voice gateway");
 
         auto gateway_connect_cb = [weak = weak_from_this()](const auto &ec) {
             if (auto self = weak.lock()) {
                 if (ec) {
-                    std::cerr << "[voice] voice gateway connection error: " << ec.message() << "\n";
+                    SPDLOG_ERROR("voice gateway connection error: {}", ec.message());
                 } else {
-                    std::cout << "[voice] connected to voice gateway. Ready to send audio\n";
+                    SPDLOG_INFO("connected to voice gateway guild[{}]", guild_id);
                     self->p_state = voice_context::state::connected;
                 }
             }
@@ -257,8 +257,7 @@ void discord::voice_context::update_bitrate()
     auto channel = guild->channels.find(to_find);
     if (channel != guild->channels.end()) {
         encoder.set_bitrate(channel->bitrate);
-        std::cout << "[voice] '" << channel->name << "' playing at " << (channel->bitrate / 1000)
-                  << "Kbps\n";
+        SPDLOG_INFO("{} playing at {} Kbps", channel->name, (channel->bitrate / 1000));
     }
 }
 
@@ -318,7 +317,7 @@ void discord::voice_context::pause()
 void discord::voice_context::notify_audio_source_ready(const boost::system::error_code &ec)
 {
     if (ec) {
-        std::cerr << "[voice] error making audio source: " << ec.message() << "\n";
+        SPDLOG_ERROR("error making audio source: {}", ec.message());
         return;
     }
     p_state = voice_context::state::playing;
@@ -336,7 +335,7 @@ void discord::voice_context::next_audio_source()
 
     auto parsed = uri::parse(next);
     if (parsed.authority.empty()) {
-        std::cerr << "[voice] invalid audio source\n";
+        SPDLOG_ERROR("invalid audio source, URI didn't parse");
         return;
     }
     static auto valid_youtube_dl_sources =
@@ -378,7 +377,7 @@ void discord::voice_context::send_next_frame()
     if (!frame.data.empty()) {
         auto fc = frame.frame_count;
         if (!(fc == 120 || fc == 240 || fc == 480 || fc == 960 || fc == 1920 || fc == 2880)) {
-            std::cerr << "[voice] invalid frame size: " << fc << "\n";
+            SPDLOG_WARN("invalid frame size: {}", fc);
             return;
         }
 
@@ -397,7 +396,7 @@ void discord::voice_context::send_next_frame()
     }
     if (frame.end_of_source) {
         // Done with the current source, play next entry
-        std::cout << "[voice] sound clip finished\n";
+        SPDLOG_INFO("sound clip finished");
         timer.cancel();
         gateway->stop();
         p_state = voice_context::state::connected;

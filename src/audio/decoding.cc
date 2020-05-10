@@ -1,9 +1,9 @@
 #include <algorithm>
 #include <cassert>
 #include <exception>
-#include <iostream>
 #include <memory>
 #include <vector>
+#include <spdlog/spdlog.h>
 
 #include "decoding.h"
 
@@ -314,7 +314,7 @@ void audio_resampler<T, format, sample_rate, channels>::feed(audio_frame *frame)
         ret = swr_convert(swr, nullptr, 0, nullptr, 0);
     }
     if (ret)
-        std::cerr << "[audio resampler] error feeding input\n";
+        SPDLOG_ERROR("error feeding input");
 }
 
 template<typename T, AVSampleFormat format, int sample_rate, int channels>
@@ -331,7 +331,7 @@ audio_samples<T> audio_resampler<T, format, sample_rate, channels>::read(int sam
     auto frame_count =
         swr_convert(swr, &frame_buf, samples, const_cast<const uint8_t **>(&frame_buf), 0);
     if (frame_count < 0)
-        std::cerr << "[audio resampler] error reading output\n";
+        SPDLOG_ERROR("error reading output");
 
     return {reinterpret_cast<T *>(frame_buf), frame_count};
 }
@@ -441,7 +441,7 @@ void simple_audio_decoder<T, format, sample_rate, channels>::check_stream()
                 break;
         }
     } catch (std::exception &e) {
-        std::cerr << e.what() << "\n";
+        SPDLOG_ERROR("decoder error: {}", e.what());
     }
 }
 

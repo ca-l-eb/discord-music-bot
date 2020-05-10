@@ -7,6 +7,7 @@ ffmpeg/4.2@bincrafters/stable
 zlib/1.2.11
 openssl/1.1.1g
 catch2/2.12.1
+spdlog/1.5.0
 
 [generators]
 cmake
@@ -22,5 +23,4 @@ ffmpeg:x264=False
 ffmpeg:x265=False
 ffmpeg:vpx=False
 ffmpeg:openssl=False
-ffmpeg:qsv=False
 ffmpeg:openh264=False

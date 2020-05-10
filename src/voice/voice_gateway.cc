@@ -1,6 +1,6 @@
 #include <array>
-#include <iostream>
 #include <nlohmann/json.hpp>
+#include <spdlog/spdlog.h>
 
 #include "discord.h"
 #include "errors.h"
@@ -20,8 +20,11 @@ discord::voice_gateway::voice_gateway(boost::asio::io_context &ctx, ssl::context
     , state{connection_state::disconnected}
     , is_speaking{false}
 {
-    std::cout << "[voice] connecting to gateway " << voice_context.get_endpoint() << " session_id["
-              << voice_context.get_session_id() << "] token[" << voice_context.get_token() << "]\n";
+    SPDLOG_INFO("connecting to gateway[{}] session_id[{}] token[{}]",
+        voice_context.get_endpoint(),
+        voice_context.get_session_id(),
+        voice_context.get_token()
+    );
 }
 
 void discord::voice_gateway::connect(error_cb c)
@@ -36,10 +39,10 @@ void discord::voice_gateway::connect(error_cb c)
                                                                         const auto &ec) {
         if (auto self = weak.lock()) {
             if (ec) {
-                std::cerr << "[voice] websocket connect error: " << ec.message() << "\n";
+                SPDLOG_ERROR("websocket connect error: {}", ec.message());
                 boost::asio::post(self->ctx, [&]() { self->voice_connect_callback(ec); });
             } else {
-                std::cout << "[voice] websocket connected\n";
+                SPDLOG_INFO("websocket connected");
                 self->state = connection_state::connected;
                 self->identify();
             }
@@ -63,10 +66,10 @@ void discord::voice_gateway::identify()
                                      {"token", voice_context.get_token()}}}};
     auto identify_sent_cb = [&](const auto &ec, auto) {
         if (ec) {
-            std::cout << "[voice] gateway identify error: " << ec.message() << "\n";
+            SPDLOG_ERROR("voice gateway identify error: {}", ec.message());
             boost::asio::post(ctx, [&]() { voice_connect_callback(ec); });
         } else {
-            std::cout << "[voice] starting event loop\n";
+            SPDLOG_INFO("starting voice gateway event loop");
             next_event();
         }
     };
@@ -83,7 +86,7 @@ void discord::voice_gateway::next_event()
     if (state == connection_state::connected)
         conn.read([weak = weak_from_this()](const auto &ec, auto &json) {
             if (ec) {
-                std::cerr << "[voice] error: " << ec.message() << "\n";
+                SPDLOG_ERROR("voice gateway error: {}", ec.message());
                 return;
             }
             if (auto self = weak.lock())
@@ -93,7 +96,7 @@ void discord::voice_gateway::next_event()
 
 void discord::voice_gateway::handle_event(const nlohmann::json &data)
 {
-    std::cout << "[voice] " << data.dump() << "\n";
+    SPDLOG_DEBUG("received message: {}", data.dump());
     try {
         auto payload = data.get<discord::voice_payload>();
 
@@ -125,7 +128,7 @@ void discord::voice_gateway::handle_event(const nlohmann::json &data)
         }
         next_event();
     } catch (nlohmann::json::exception &e) {
-        std::cerr << "[voice] gateway error: " << e.what() << "\n";
+        SPDLOG_ERROR("voice gateway error: {}", e.what());
     }
 }
 
@@ -200,7 +203,7 @@ void discord::voice_gateway::notify_heartbeater_hello(nlohmann::json &data)
         data["heartbeat_interval"] = val;
         beater.on_hello(data, *this);
     } else {
-        std::cerr << "[voice] no heartbeat_interval in hello payload\n";
+        SPDLOG_ERROR("no heartbeat_interval in hello payload message");
     }
 }
 

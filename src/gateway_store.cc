@@ -1,4 +1,4 @@
-#include <iostream>
+#include <spdlog/spdlog.h>
 
 #include "gateway_store.h"
 
@@ -14,7 +14,7 @@ void discord::gateway_store::guild_create(const nlohmann::json &json)
 
         guilds[g.id] = std::make_unique<discord::guild>(std::move(g));
     } catch (std::exception &e) {
-        std::cerr << "[gateway store] " << e.what() << "\n";
+        SPDLOG_ERROR("json error: {}", e.what());
     }
 }
 
@@ -28,7 +28,7 @@ void discord::gateway_store::channel_create(const nlohmann::json &json)
             g->channels.insert(c);
         }
     } catch (std::exception &e) {
-        std::cerr << "[gateway store] " << e.what() << "\n";
+        SPDLOG_ERROR("json error: {}", e.what());
     }
 }
 
@@ -43,7 +43,7 @@ void discord::gateway_store::channel_update(const nlohmann::json &json)
             g->channels.insert(c);
         }
     } catch (std::exception &e) {
-        std::cerr << "[gateway store] " << e.what() << "\n";
+        SPDLOG_ERROR("json error: {}", e.what());
     }
 }
 
@@ -57,7 +57,7 @@ void discord::gateway_store::channel_delete(const nlohmann::json &json)
         }
         channels_to_guild.erase(c.id);
     } catch (std::exception &e) {
-        std::cerr << "[gateway store] " << e.what() << "\n";
+        SPDLOG_ERROR("json error: {}", e.what());
     }
 }
 
@@ -69,7 +69,7 @@ void discord::gateway_store::voice_state_update(const nlohmann::json &json)
         g->voice_states.erase(vs);  // erase any existing voice state information
         g->voice_states.insert(std::move(vs));
     } catch (std::exception &e) {
-        std::cerr << "[gateway store] " << e.what() << "\n";
+        SPDLOG_ERROR("json error: {}", e.what());
     }
 }
 

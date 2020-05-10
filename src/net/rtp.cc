@@ -1,6 +1,6 @@
 #include <cstdlib>
 #include <cstring>
-#include <iostream>
+#include <spdlog/spdlog.h>
 
 #include "errors.h"
 #include "net/rtp.h"
@@ -27,8 +27,10 @@ void discord::rtp_session::connect(const std::string &host, const std::string &p
             c(ec);  // host resolve error
         } else {
             sock.connect(*it);
-            std::cout << "[RTP] udp local: " << sock.local_endpoint()
-                      << " remote: " << sock.remote_endpoint() << "\n";
+            SPDLOG_INFO("udp local: {} remote: {}",
+                sock.local_endpoint().address().to_string(),
+                sock.remote_endpoint().address().to_string()
+            );
             c({});
         }
     });
@@ -69,8 +71,7 @@ void discord::rtp_session::ip_discovery(error_cb c)
             // Last 2 bytes are udp port (little endian)
             external_port = (buffer[ip_discovery_msg_size - 1] << 8) | buffer[ip_discovery_msg_size - 2];
 
-            std::cout << "[RTP] udp socket external addresses " << external_ip << ":"
-                      << external_port << "\n";
+            SPDLOG_INFO("udp socket external address: {}:{}", external_ip, external_port);
             c({});  // success
         }
     };
@@ -83,8 +84,7 @@ void discord::rtp_session::send_ip_discovery_datagram(int retries, error_cb c)
 {
     auto udp_sent_cb = [=](const auto &ec, auto) {
         if (ec && ec != boost::asio::error::operation_aborted) {
-            std::cerr << "[RTP] could not send udp packet to voice server: " << ec.message()
-                      << "\n";
+            SPDLOG_ERROR("could not send udp packet to voice server: {}", ec.message());
         }
         if (retries == 0) {
             // Failed to receive response in a reasonable time.
@@ -124,17 +124,6 @@ static void write_rtp_header(unsigned char *buffer, uint16_t seq_num, uint32_t t
     buffer[11] = (ssrc >> 0) & 0xFF;
 }
 
-static void print_rtp_send_info(const boost::system::error_code &ec, size_t transferred)
-{
-    static auto bytes_sent = 0LL;
-    bytes_sent += transferred;
-    if (ec) {
-        std::cerr << "[RTP] error: " << ec.message() << "\n";
-    } else {
-        std::cout << "[RTP] " << transferred << " bytes sent (" << bytes_sent << " total)\r";
-    }
-}
-
 void discord::rtp_session::send(const opus_frame &frame)
 {
     auto size = frame.data.size();
@@ -162,7 +151,7 @@ void discord::rtp_session::send(const opus_frame &frame)
                                                             secret_key.data(), nonce.data());
 
     if (error) {
-        std::cerr << "[RTP] error encrypting data\n";
+        SPDLOG_ERROR("error encrypting data");
         return;
     }
 
